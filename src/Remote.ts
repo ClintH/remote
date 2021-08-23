@@ -19,7 +19,6 @@ export default class Remote {
   url?: string;
   minMessageIntervalMs: number;
 
-
   lastDataEl: HTMLElement | null = null;
   logEl: HTMLElement | null = null;
   lastSend: number = 0;
