@@ -19,6 +19,9 @@ export default class Remote {
   url?: string;
   minMessageIntervalMs: number;
 
+
+  receiveSerials: Map<string, number> = new Map();
+  serial: number = 0;
   lastDataEl: HTMLElement | null = null;
   logEl: HTMLElement | null = null;
   lastSend: number = 0;
@@ -59,6 +62,7 @@ export default class Remote {
 
     const str = JSON.stringify({
       from: this.ourId,
+      serial: this.serial++,
       ...data
     });
 
@@ -67,12 +71,24 @@ export default class Remote {
 
     // Send out over broadcast channel if available
     if (this.useBroadcastChannel && this.bc) {
-      //console.log('bcast post: ' + str);
       this.bc.postMessage(str);
     }
 
     if (this.lastDataEl) this.lastDataEl.innerText = str;
     this.lastSend = Date.now();
+
+  }
+
+  seenMessage(o: any) {
+    if (!o.serial) return;
+    if (!o.from) return;
+
+    const lastSerial = this.receiveSerials.get(o.from);
+    if (lastSerial) {
+      if (lastSerial >= o.serial) return true;
+    }
+    this.receiveSerials.set(o.from, o.serial);
+    return false;
   }
 
   initBroadcastChannel() {
@@ -82,7 +98,8 @@ export default class Remote {
         try {
           const o = JSON.parse(evt.data);
           o.source = 'bc';
-          this.onData(o);
+          if (!this.seenMessage(o))
+            this.onData(o);
         } catch (err) {
           this.error(err);
           this.log('Data: ' + JSON.stringify(evt.data));
@@ -120,25 +137,28 @@ export default class Remote {
 
     if (this.ourId === undefined) {
       // Still no id? Make a random one
-      this.ourId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
     }
-
-    window.localStorage.setItem('remoteId', this.ourId);
 
     // Wire up some elements if they are present
     const txtSourceName = document.getElementById('txtSourceName') as HTMLInputElement;
     if (txtSourceName) {
-      txtSourceName.value = this.ourId;
+      if (this.ourId) txtSourceName.value = this.ourId;
       txtSourceName.addEventListener('change', () => {
         const id = txtSourceName.value.trim();
         if (id.length == 0) return;
-        this.ourId = id;
-        this.log(`Source name changed to: ${this.ourId}`);
-        window.localStorage.setItem('remoteId', this.ourId);
+        this.setId(id);
       });
     }
     document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
 
+  }
+
+  setId(id: string) {
+    window.localStorage.setItem('remoteId', id);
+    this.ourId = id;
+    this.serial = 0;
+    this.log(`Source name changed to: ${id}`);
   }
 
   initSockets() {
@@ -166,7 +186,9 @@ export default class Remote {
         const o = JSON.parse(evt.data);
         if (o.from === this.ourId) return; // data is from ourself, ignore
         o.source = 'ws';
-        this.onData(o);
+
+        if (!this.seenMessage(o)) this.onData(o);
+
       } catch (err) {
         this.error(err);
         this.log('Data: ' + JSON.stringify(evt.data));

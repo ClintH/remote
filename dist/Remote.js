@@ -5,6 +5,8 @@ export default class Remote {
         this.connected = false;
         this.useSockets = false;
         this.useBroadcastChannel = false;
+        this.receiveSerials = new Map();
+        this.serial = 0;
         this.lastDataEl = null;
         this.logEl = null;
         this.lastSend = 0;
@@ -40,6 +42,7 @@ export default class Remote {
             return;
         const str = JSON.stringify({
             from: this.ourId,
+            serial: this.serial++,
             ...data
         });
         if (this.socket && this.useSockets && this.socket.isReady())
@@ -51,6 +54,19 @@ export default class Remote {
             this.lastDataEl.innerText = str;
         this.lastSend = Date.now();
     }
+    seenMessage(o) {
+        if (!o.serial)
+            return;
+        if (!o.from)
+            return;
+        const lastSerial = this.receiveSerials.get(o.from);
+        if (lastSerial) {
+            if (lastSerial >= o.serial)
+                return true;
+        }
+        this.receiveSerials.set(o.from, o.serial);
+        return false;
+    }
     initBroadcastChannel() {
         try {
             const bc = new BroadcastChannel('remote');
@@ -58,7 +74,8 @@ export default class Remote {
                 try {
                     const o = JSON.parse(evt.data);
                     o.source = 'bc';
-                    this.onData(o);
+                    if (!this.seenMessage(o))
+                        this.onData(o);
                 }
                 catch (err) {
                     this.error(err);
@@ -88,22 +105,26 @@ export default class Remote {
                 this.ourId = v;
         }
         if (this.ourId === undefined) {
-            this.ourId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+            this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
         }
-        window.localStorage.setItem('remoteId', this.ourId);
         const txtSourceName = document.getElementById('txtSourceName');
         if (txtSourceName) {
-            txtSourceName.value = this.ourId;
+            if (this.ourId)
+                txtSourceName.value = this.ourId;
             txtSourceName.addEventListener('change', () => {
                 const id = txtSourceName.value.trim();
                 if (id.length == 0)
                     return;
-                this.ourId = id;
-                this.log(`Source name changed to: ${this.ourId}`);
-                window.localStorage.setItem('remoteId', this.ourId);
+                this.setId(id);
             });
         }
         document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
+    }
+    setId(id) {
+        window.localStorage.setItem('remoteId', id);
+        this.ourId = id;
+        this.serial = 0;
+        this.log(`Source name changed to: ${id}`);
     }
     initSockets() {
         if (!this.url)
@@ -132,7 +153,8 @@ export default class Remote {
                 if (o.from === this.ourId)
                     return;
                 o.source = 'ws';
-                this.onData(o);
+                if (!this.seenMessage(o))
+                    this.onData(o);
             }
             catch (err) {
                 this.error(err);

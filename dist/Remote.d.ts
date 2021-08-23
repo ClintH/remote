@@ -16,14 +16,18 @@ export default class Remote {
     ourId?: string;
     url?: string;
     minMessageIntervalMs: number;
+    receiveSerials: Map<string, number>;
+    serial: number;
     lastDataEl: HTMLElement | null;
     logEl: HTMLElement | null;
     lastSend: number;
     socket?: ReconnectingWebsocket;
     constructor(opts?: Options);
     send(data: any): void;
+    seenMessage(o: any): boolean | undefined;
     initBroadcastChannel(): void;
     init(): void;
+    setId(id: string): void;
     initSockets(): void;
     onData(d: any): void;
     getId(): string | undefined;

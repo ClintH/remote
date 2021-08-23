@@ -90,3 +90,8 @@ const r = new Remote({
   minMessageIntervalMs: 10
 });
 ```
+
+# Credits
+
+Bundles Pedro Ladaria's [Reconnecting-Websocket](https://github.com/pladaria/reconnecting-websocket)
+
