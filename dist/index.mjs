@@ -1,19 +1,36 @@
+class Event {
+    constructor(type, target) {
+        this.target = target;
+        this.type = type;
+    }
+}
+class ErrorEvent extends Event {
+    constructor(error, target) {
+        super('error', target);
+        this.message = error.message;
+        this.error = error;
+    }
+}
+class CloseEvent extends Event {
+    constructor(code = 1000, reason = '', target) {
+        super('close', target);
+        this.wasClean = true;
+        this.code = code;
+        this.reason = reason;
+    }
+}
+
 /*!
  * Reconnecting WebSocket
  * by Pedro Ladaria <pedro.ladaria@gmail.com>
  * https://github.com/pladaria/reconnecting-websocket
  * License MIT
  */
-import * as Events from './Events.js';
 const getGlobalWebSocket = () => {
     if (typeof WebSocket !== 'undefined') {
-        // @ts-ignore
         return WebSocket;
     }
 };
-/**
- * Returns true if given argument looks like a WebSocket class
- */
 const isWebSocket = (w) => typeof w !== 'undefined' && !!w && w.CLOSING === 2;
 const DEFAULT = {
     maxReconnectionDelay: 10000,
@@ -26,7 +43,7 @@ const DEFAULT = {
     startClosed: false,
     debug: false,
 };
-export default class ReconnectingWebSocket {
+class ReconnectingWebSocket {
     constructor(url, protocols, options = {}) {
         this._listeners = {
             error: [],
@@ -40,22 +57,9 @@ export default class ReconnectingWebSocket {
         this._binaryType = 'blob';
         this._closeCalled = false;
         this._messageQueue = [];
-        /**
-         * An event listener to be called when the WebSocket connection's readyState changes to CLOSED
-         */
         this.onclose = null;
-        /**
-         * An event listener to be called when an error occurs
-         */
         this.onerror = null;
-        /**
-         * An event listener to be called when a message is received from the server
-         */
         this.onmessage = null;
-        /**
-         * An event listener to be called when the WebSocket connection's readyState changes to OPEN;
-         * this indicates that the connection is ready to send and receive data
-         */
         this.onopen = null;
         this._handleOpen = (event) => {
             this._debug('open event');
@@ -63,7 +67,6 @@ export default class ReconnectingWebSocket {
             clearTimeout(this._connectTimeout);
             this._uptimeTimeout = setTimeout(() => this._acceptOpen(), minUptime);
             this._ws.binaryType = this._binaryType;
-            // send enqueued messages (messages sent before websocket open event)
             this._messageQueue.forEach(message => this._ws?.send(message));
             this._messageQueue = [];
             if (this.onopen) {
@@ -140,22 +143,13 @@ export default class ReconnectingWebSocket {
             this._ws.binaryType = value;
         }
     }
-    /**
-     * Returns the number or connection retries
-     */
     get retryCount() {
         return Math.max(this._retryCount, 0);
     }
-    /**
-     * The number of bytes of data that have been queued using calls to send() but not yet
-     * transmitted to the network. This value resets to zero once all queued data has been sent.
-     * This value does not reset to zero when the connection is closed; if you keep calling send(),
-     * this will continue to climb. Read only
-     */
     get bufferedAmount() {
         const bytes = this._messageQueue.reduce((acc, message) => {
             if (typeof message === 'string') {
-                acc += message.length; // not byte size
+                acc += message.length;
             }
             else if (message instanceof Blob) {
                 acc += message.size;
@@ -167,24 +161,12 @@ export default class ReconnectingWebSocket {
         }, 0);
         return bytes + (this._ws ? this._ws.bufferedAmount : 0);
     }
-    /**
-     * The extensions selected by the server. This is currently only the empty string or a list of
-     * extensions as negotiated by the connection
-     */
     get extensions() {
         return this._ws ? this._ws.extensions : '';
     }
-    /**
-     * A string indicating the name of the sub-protocol the server selected;
-     * this will be one of the strings specified in the protocols parameter when creating the
-     * WebSocket object
-     */
     get protocol() {
         return this._ws ? this._ws.protocol : '';
     }
-    /**
-     * The current state of the connection; this is one of the Ready state constants
-     */
     get readyState() {
         if (this._ws) {
             return this._ws.readyState;
@@ -193,16 +175,9 @@ export default class ReconnectingWebSocket {
             ? ReconnectingWebSocket.CLOSED
             : ReconnectingWebSocket.CONNECTING;
     }
-    /**
-     * The URL as resolved by the constructor
-     */
     get url() {
         return this._ws ? this._ws.url : '';
     }
-    /**
-     * Closes the WebSocket connection or connection attempt, if any. If the connection is already
-     * CLOSED, this method does nothing
-     */
     close(code = 1000, reason) {
         this._closeCalled = true;
         this._shouldReconnect = false;
@@ -217,10 +192,6 @@ export default class ReconnectingWebSocket {
         }
         this._ws.close(code, reason);
     }
-    /**
-     * Closes the WebSocket connection or connection attempt and connects again.
-     * Resets retry counter;
-     */
     reconnect(code, reason) {
         this._shouldReconnect = true;
         this._closeCalled = false;
@@ -238,9 +209,6 @@ export default class ReconnectingWebSocket {
             return true;
         return false;
     }
-    /**
-     * Enqueue specified data to be transmitted to the server over the WebSocket connection
-     */
     send(data) {
         if (this._ws && this._ws.readyState === this.OPEN) {
             this._debug('send', data);
@@ -254,12 +222,8 @@ export default class ReconnectingWebSocket {
             }
         }
     }
-    /**
-     * Register an event handler of a specific event type
-     */
     addEventListener(type, listener) {
         if (this._listeners[type]) {
-            // @ts-ignore
             this._listeners[type].push(listener);
         }
     }
@@ -272,19 +236,13 @@ export default class ReconnectingWebSocket {
         }
         return true;
     }
-    /**
-     * Removes an event listener
-     */
     removeEventListener(type, listener) {
         if (this._listeners[type]) {
-            // @ts-ignore
             this._listeners[type] = this._listeners[type].filter(l => l !== listener);
         }
     }
     _debug(...args) {
         if (this._options.debug) {
-            // not using spread because compiled version uses Symbols
-            // tslint:disable-next-line
             console.log.apply(console, ['RWS>', ...args]);
         }
     }
@@ -315,7 +273,6 @@ export default class ReconnectingWebSocket {
             if (typeof url === 'string') {
                 return Promise.resolve(url);
             }
-            // @ts-ignore redundant check
             if (url.then) {
                 return url;
             }
@@ -341,7 +298,6 @@ export default class ReconnectingWebSocket {
         this._wait()
             .then(() => this._getNextUrl(this._url))
             .then(url => {
-            // close could be called before creating the ws
             if (this._closeCalled) {
                 return;
             }
@@ -357,7 +313,7 @@ export default class ReconnectingWebSocket {
     }
     _handleTimeout() {
         this._debug('timeout event');
-        this._handleError(new Events.ErrorEvent(Error('TIMEOUT'), this));
+        this._handleError(new ErrorEvent(Error('TIMEOUT'), this));
     }
     _disconnect(code = 1000, reason) {
         this._clearTimeouts();
@@ -367,10 +323,9 @@ export default class ReconnectingWebSocket {
         this._removeListeners();
         try {
             this._ws.close(code, reason);
-            this._handleClose(new Events.CloseEvent(code, reason, this));
+            this._handleClose(new CloseEvent(code, reason, this));
         }
         catch (error) {
-            // ignore
         }
     }
     _acceptOpen() {
@@ -379,11 +334,9 @@ export default class ReconnectingWebSocket {
     }
     _callEventListener(event, listener) {
         if ('handleEvent' in listener) {
-            // @ts-ignore
             listener.handleEvent(event);
         }
         else {
-            // @ts-ignore
             listener(event);
         }
     }
@@ -395,7 +348,6 @@ export default class ReconnectingWebSocket {
         this._ws.removeEventListener('open', this._handleOpen);
         this._ws.removeEventListener('close', this._handleClose);
         this._ws.removeEventListener('message', this._handleMessage);
-        // @ts-ignore
         this._ws.removeEventListener('error', this._handleError);
     }
     _addListeners() {
@@ -406,7 +358,6 @@ export default class ReconnectingWebSocket {
         this._ws.addEventListener('open', this._handleOpen);
         this._ws.addEventListener('close', this._handleClose);
         this._ws.addEventListener('message', this._handleMessage);
-        // @ts-ignore
         this._ws.addEventListener('error', this._handleError);
     }
     _clearTimeouts() {
@@ -414,3 +365,178 @@ export default class ReconnectingWebSocket {
         clearTimeout(this._uptimeTimeout);
     }
 }
+
+class Remote {
+    constructor(opts = { remote: false }) {
+        this.bc = null;
+        this.connected = false;
+        this.useSockets = false;
+        this.useBroadcastChannel = false;
+        this.lastDataEl = null;
+        this.logEl = null;
+        this.lastSend = 0;
+        if (!opts.minMessageIntervalMs)
+            opts.minMessageIntervalMs = 15;
+        this.remote = opts.remote;
+        if (opts.useSockets === undefined)
+            this.useSockets = location.host.endsWith('glitch.me') || false;
+        else
+            this.useSockets = opts.useSockets;
+        if (opts.useBroadcastChannel === undefined) {
+            if (opts.useSockets)
+                this.useBroadcastChannel = false;
+            else
+                this.useBroadcastChannel = true;
+        }
+        else {
+            this.useBroadcastChannel = opts.useBroadcastChannel;
+        }
+        this.ourId = opts.ourId;
+        this.lastSend = 0;
+        this.url = opts.url;
+        this.minMessageIntervalMs = opts.minMessageIntervalMs;
+        this.init();
+        if (this.useSockets)
+            this.initSockets();
+        if (this.useBroadcastChannel)
+            this.initBroadcastChannel();
+    }
+    send(data) {
+        const interval = Date.now() - this.lastSend;
+        if (interval < this.minMessageIntervalMs)
+            return;
+        const str = JSON.stringify({
+            from: this.ourId,
+            ...data
+        });
+        if (this.socket && this.useSockets && this.socket.isReady())
+            this.socket.send(str);
+        if (this.useBroadcastChannel && this.bc) {
+            this.bc.postMessage(str);
+        }
+        if (this.lastDataEl)
+            this.lastDataEl.innerText = str;
+        this.lastSend = Date.now();
+    }
+    initBroadcastChannel() {
+        try {
+            const bc = new BroadcastChannel('remote');
+            bc.onmessage = (evt) => {
+                try {
+                    const o = JSON.parse(evt.data);
+                    o.source = 'bc';
+                    this.onData(o);
+                }
+                catch (err) {
+                    this.error(err);
+                    this.log('Data: ' + JSON.stringify(evt.data));
+                }
+            };
+            this.bc = bc;
+            console.log('Broadcast channel created');
+        }
+        catch (ex) {
+            console.error(ex);
+        }
+    }
+    init() {
+        this.logEl = document.getElementById('log');
+        this.lastDataEl = document.getElementById('lastData');
+        if (this.remote) {
+            console.log2 = console.log;
+            console.error2 = console.error;
+            console.log = this.log.bind(this);
+            console.error = this.error.bind(this);
+            window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
+        }
+        if (this.ourId === undefined) {
+            const v = window.localStorage.getItem('remoteId');
+            if (v !== null)
+                this.ourId = v;
+        }
+        if (this.ourId === undefined) {
+            this.ourId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        window.localStorage.setItem('remoteId', this.ourId);
+        const txtSourceName = document.getElementById('txtSourceName');
+        if (txtSourceName) {
+            txtSourceName.value = this.ourId;
+            txtSourceName.addEventListener('change', () => {
+                const id = txtSourceName.value.trim();
+                if (id.length == 0)
+                    return;
+                this.ourId = id;
+                this.log(`Source name changed to: ${this.ourId}`);
+                window.localStorage.setItem('remoteId', this.ourId);
+            });
+        }
+        document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
+    }
+    initSockets() {
+        if (!this.url)
+            this.url = (location.protocol === 'http:' ? 'ws://' : 'wss://') + location.host + '/ws';
+        const s = new ReconnectingWebSocket(this.url);
+        const setConnected = (isConnected) => {
+            this.connected = isConnected;
+            if (isConnected) {
+                this.log('Web sockets connected to: ' + this.url);
+            }
+            else
+                this.log('Disconnected 😒');
+        };
+        s.onopen = (e) => {
+            setConnected(true);
+        };
+        s.onclose = (e) => {
+            setConnected(false);
+        };
+        s.onerror = (e) => {
+            setConnected(false);
+        };
+        s.onmessage = (evt) => {
+            try {
+                const o = JSON.parse(evt.data);
+                if (o.from === this.ourId)
+                    return;
+                o.source = 'ws';
+                this.onData(o);
+            }
+            catch (err) {
+                this.error(err);
+                this.log('Data: ' + JSON.stringify(evt.data));
+            }
+        };
+        this.socket = s;
+    }
+    onData(d) {
+    }
+    getId() {
+        return this.ourId;
+    }
+    clearLog() {
+        if (this.logEl)
+            this.logEl.innerHTML = '';
+    }
+    log(msg) {
+        if (typeof msg === 'object')
+            msg = JSON.stringify(msg);
+        if (this.remote && console.log2)
+            console.log2(msg);
+        else
+            console.log(msg);
+        const html = `<div>${msg}</div>`;
+        this.logEl?.insertAdjacentHTML('afterbegin', html);
+    }
+    error(msg, exception) {
+        if (this.remote && console.error2)
+            console.error2(msg);
+        else
+            console.error(msg);
+        let html = `<div class="error">${msg}</div>`;
+        if (exception?.stack)
+            html += `<div class="error">${exception.stack}</div>`;
+        this.logEl?.insertAdjacentHTML('afterbegin', html);
+    }
+}
+
+export { Remote };

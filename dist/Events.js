@@ -19,3 +19,4 @@ export class CloseEvent extends Event {
         this.reason = reason;
     }
 }
+//# sourceMappingURL=Events.js.map

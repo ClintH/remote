@@ -11,12 +11,10 @@ export default class Remote {
         if (!opts.minMessageIntervalMs)
             opts.minMessageIntervalMs = 15;
         this.remote = opts.remote;
-        // If sketch is hosted on Glitch, enable sockets, otherwise not
         if (opts.useSockets === undefined)
             this.useSockets = location.host.endsWith('glitch.me') || false;
         else
             this.useSockets = opts.useSockets;
-        // Use bcast if we're not using sockets
         if (opts.useBroadcastChannel === undefined) {
             if (opts.useSockets)
                 this.useBroadcastChannel = false;
@@ -37,7 +35,6 @@ export default class Remote {
             this.initBroadcastChannel();
     }
     send(data) {
-        // Throttle sending
         const interval = Date.now() - this.lastSend;
         if (interval < this.minMessageIntervalMs)
             return;
@@ -45,12 +42,9 @@ export default class Remote {
             from: this.ourId,
             ...data
         });
-        // Send out over sockets if ready
         if (this.socket && this.useSockets && this.socket.isReady())
             this.socket.send(str);
-        // Send out over broadcast channel if available
         if (this.useBroadcastChannel && this.bc) {
-            //console.log('bcast post: ' + str);
             this.bc.postMessage(str);
         }
         if (this.lastDataEl)
@@ -63,7 +57,6 @@ export default class Remote {
             bc.onmessage = (evt) => {
                 try {
                     const o = JSON.parse(evt.data);
-                    //if (o.from === this.ourId) return; // data is from ourself, ignore
                     o.source = 'bc';
                     this.onData(o);
                 }
@@ -82,29 +75,22 @@ export default class Remote {
     init() {
         this.logEl = document.getElementById('log');
         this.lastDataEl = document.getElementById('lastData');
-        // On mobile, won't see console, so add it to HTML
         if (this.remote) {
-            // @ts-ignore
             console.log2 = console.log;
-            // @ts-ignore
             console.error2 = console.error;
             console.log = this.log.bind(this);
             console.error = this.error.bind(this);
-            // Log any uncaught errors
             window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
         }
         if (this.ourId === undefined) {
-            // No manual id? Try using the last
             const v = window.localStorage.getItem('remoteId');
             if (v !== null)
                 this.ourId = v;
         }
         if (this.ourId === undefined) {
-            // Still no id? Make a random one
             this.ourId = Date.now().toString(36) + Math.random().toString(36).substr(2);
         }
         window.localStorage.setItem('remoteId', this.ourId);
-        // Wire up some elements if they are present
         const txtSourceName = document.getElementById('txtSourceName');
         if (txtSourceName) {
             txtSourceName.value = this.ourId;
@@ -144,7 +130,7 @@ export default class Remote {
             try {
                 const o = JSON.parse(evt.data);
                 if (o.from === this.ourId)
-                    return; // data is from ourself, ignore
+                    return;
                 o.source = 'ws';
                 this.onData(o);
             }
@@ -156,7 +142,6 @@ export default class Remote {
         this.socket = s;
     }
     onData(d) {
-        // noop
     }
     getId() {
         return this.ourId;
@@ -168,7 +153,6 @@ export default class Remote {
     log(msg) {
         if (typeof msg === 'object')
             msg = JSON.stringify(msg);
-        // @ts-ignore
         if (this.remote && console.log2)
             console.log2(msg);
         else
@@ -177,7 +161,6 @@ export default class Remote {
         this.logEl?.insertAdjacentHTML('afterbegin', html);
     }
     error(msg, exception) {
-        // @ts-ignore
         if (this.remote && console.error2)
             console.error2(msg);
         else
@@ -188,3 +171,4 @@ export default class Remote {
         this.logEl?.insertAdjacentHTML('afterbegin', html);
     }
 }
+//# sourceMappingURL=Remote.js.map

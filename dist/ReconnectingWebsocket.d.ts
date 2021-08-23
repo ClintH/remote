@@ -53,76 +53,22 @@ export default class ReconnectingWebSocket {
     get CLOSED(): number;
     get binaryType(): BinaryType;
     set binaryType(value: BinaryType);
-    /**
-     * Returns the number or connection retries
-     */
     get retryCount(): number;
-    /**
-     * The number of bytes of data that have been queued using calls to send() but not yet
-     * transmitted to the network. This value resets to zero once all queued data has been sent.
-     * This value does not reset to zero when the connection is closed; if you keep calling send(),
-     * this will continue to climb. Read only
-     */
     get bufferedAmount(): number;
-    /**
-     * The extensions selected by the server. This is currently only the empty string or a list of
-     * extensions as negotiated by the connection
-     */
     get extensions(): string;
-    /**
-     * A string indicating the name of the sub-protocol the server selected;
-     * this will be one of the strings specified in the protocols parameter when creating the
-     * WebSocket object
-     */
     get protocol(): string;
-    /**
-     * The current state of the connection; this is one of the Ready state constants
-     */
     get readyState(): number;
-    /**
-     * The URL as resolved by the constructor
-     */
     get url(): string;
-    /**
-     * An event listener to be called when the WebSocket connection's readyState changes to CLOSED
-     */
     onclose: ((event: Events.CloseEvent) => void) | null;
-    /**
-     * An event listener to be called when an error occurs
-     */
     onerror: ((event: Events.ErrorEvent) => void) | null;
-    /**
-     * An event listener to be called when a message is received from the server
-     */
     onmessage: ((event: MessageEvent) => void) | null;
-    /**
-     * An event listener to be called when the WebSocket connection's readyState changes to OPEN;
-     * this indicates that the connection is ready to send and receive data
-     */
     onopen: ((event: Event) => void) | null;
-    /**
-     * Closes the WebSocket connection or connection attempt, if any. If the connection is already
-     * CLOSED, this method does nothing
-     */
     close(code?: number, reason?: string): void;
-    /**
-     * Closes the WebSocket connection or connection attempt and connects again.
-     * Resets retry counter;
-     */
     reconnect(code?: number, reason?: string): void;
     isReady(): boolean;
-    /**
-     * Enqueue specified data to be transmitted to the server over the WebSocket connection
-     */
     send(data: Message): void;
-    /**
-     * Register an event handler of a specific event type
-     */
     addEventListener<T extends keyof Events.WebSocketEventListenerMap>(type: T, listener: Events.WebSocketEventListenerMap[T]): void;
     dispatchEvent(event: Event): boolean;
-    /**
-     * Removes an event listener
-     */
     removeEventListener<T extends keyof Events.WebSocketEventListenerMap>(type: T, listener: Events.WebSocketEventListenerMap[T]): void;
     private _debug;
     private _getNextDelay;
