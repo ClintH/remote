@@ -22,6 +22,7 @@ export default class Remote {
     lastDataEl: HTMLElement | null;
     logEl: HTMLElement | null;
     lastSend: number;
+    lastReceive: number;
     socket?: ReconnectingWebsocket;
     serialise: boolean;
     constructor(opts?: Options);
@@ -30,6 +31,7 @@ export default class Remote {
     initBroadcastChannel(): void;
     init(): void;
     setId(id: string): void;
+    receiveElapsed(): number | null;
     initSockets(): void;
     onData(d: any): void;
     getId(): string | undefined;

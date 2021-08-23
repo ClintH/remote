@@ -377,6 +377,7 @@ class Remote {
         this.lastDataEl = null;
         this.logEl = null;
         this.lastSend = 0;
+        this.lastReceive = 0;
         if (!opts.minMessageIntervalMs)
             opts.minMessageIntervalMs = 15;
         if (!opts.serialise)
@@ -453,6 +454,7 @@ class Remote {
         try {
             const bc = new BroadcastChannel('remote');
             bc.onmessage = (evt) => {
+                this.lastReceive = Date.now();
                 try {
                     const o = JSON.parse(evt.data);
                     o.source = 'bc';
@@ -508,6 +510,11 @@ class Remote {
         this.serial = 0;
         this.log(`Source name changed to: ${id}`);
     }
+    receiveElapsed() {
+        if (this.lastReceive == 0)
+            return null;
+        return Date.now() - this.lastReceive;
+    }
     initSockets() {
         if (!this.url)
             this.url = (location.protocol === 'http:' ? 'ws://' : 'wss://') + location.host + '/ws';
@@ -530,6 +537,7 @@ class Remote {
             setConnected(false);
         };
         s.onmessage = (evt) => {
+            this.lastReceive = Date.now();
             try {
                 const o = JSON.parse(evt.data);
                 if (o.from === this.ourId)
