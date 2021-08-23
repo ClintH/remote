@@ -34,26 +34,16 @@ r.onData = (d) => {
 }
 ```
 
-## Remote helper
 
-The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Enable it by setting `remote` to true in the options.
-
-To use this, make sure your HTML page contains:
-
-```html
-<div id="lastData"></div>
-<h2 id="logTitle">Log</h2>
-<div id="log"></div>
-```
-
-When enabled:
-* All console.log and console.error messages are appended to #log element (if this element is present)
-* If #logTitle is clicked, #log will be cleared (if this element is present)
-* The last sent data is displayed in #lastData (if this element is present)
 
 ## Options
 
-When creating a new instance, these are the options you have:
+When creating a new instance, options can be set to customise behaviour:
+
+serialise (boolean)
+* When true, outgoing messages are given a serial number. Incoming messages are discarded if they are below the last serial number received from a given source
+* Serials reset after 10,000
+* Default: true
 
 remote (boolean)
 * When true, the library actives its 'remote helper' feature, see below for more details
@@ -90,6 +80,24 @@ const r = new Remote({
   minMessageIntervalMs: 10
 });
 ```
+
+## Remote helper
+
+The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Enable it by setting `remote` to true in the options.
+
+To use this, make sure your HTML page contains:
+
+```html
+<div id="lastData"></div>
+<h2 id="logTitle">Log</h2>
+<div id="log"></div>
+```
+
+When enabled:
+* All console.log and console.error messages are appended to #log element (if this element is present)
+* If #logTitle is clicked, #log will be cleared (if this element is present)
+* The last sent data is displayed in #lastData (if this element is present)
+
 
 # Credits
 

@@ -379,7 +379,10 @@ class Remote {
         this.lastSend = 0;
         if (!opts.minMessageIntervalMs)
             opts.minMessageIntervalMs = 15;
+        if (!opts.serialise)
+            opts.serialise = true;
         this.remote = opts.remote;
+        this.serialise = opts.serialise;
         if (opts.useSockets === undefined)
             this.useSockets = location.host.endsWith('glitch.me') || false;
         else
@@ -407,11 +410,13 @@ class Remote {
         const interval = Date.now() - this.lastSend;
         if (interval < this.minMessageIntervalMs)
             return;
-        const str = JSON.stringify({
+        const d = {
             from: this.ourId,
-            serial: this.serial++,
             ...data
-        });
+        };
+        if (this.serialise)
+            d.serial = this.serial++;
+        const str = JSON.stringify(d);
         if (this.socket && this.useSockets && this.socket.isReady())
             this.socket.send(str);
         if (this.useBroadcastChannel && this.bc) {
@@ -420,16 +425,26 @@ class Remote {
         if (this.lastDataEl)
             this.lastDataEl.innerText = str;
         this.lastSend = Date.now();
+        if (this.serial > 1000)
+            this.serial = 0;
     }
     seenMessage(o) {
+        if (!this.serialise)
+            return false;
         if (!o.serial)
             return;
         if (!o.from)
             return;
         const lastSerial = this.receiveSerials.get(o.from);
         if (lastSerial) {
-            if (lastSerial >= o.serial)
+            if (lastSerial === o.serial) {
                 return true;
+            }
+            if (lastSerial > o.serial) {
+                if (o.serial < 10) ;
+                else
+                    return true;
+            }
         }
         this.receiveSerials.set(o.from, o.serial);
         return false;

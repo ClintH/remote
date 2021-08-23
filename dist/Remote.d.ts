@@ -6,6 +6,7 @@ interface Options {
     useSockets?: boolean;
     minMessageIntervalMs?: number;
     useBroadcastChannel?: boolean;
+    serialise?: boolean;
 }
 export default class Remote {
     bc: BroadcastChannel | null;
@@ -22,6 +23,7 @@ export default class Remote {
     logEl: HTMLElement | null;
     lastSend: number;
     socket?: ReconnectingWebsocket;
+    serialise: boolean;
     constructor(opts?: Options);
     send(data: any): void;
     seenMessage(o: any): boolean | undefined;

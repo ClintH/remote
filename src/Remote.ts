@@ -6,7 +6,8 @@ interface Options {
   url?: string,
   useSockets?: boolean,
   minMessageIntervalMs?: number,
-  useBroadcastChannel?: boolean
+  useBroadcastChannel?: boolean,
+  serialise?: boolean
 }
 
 export default class Remote {
@@ -26,10 +27,14 @@ export default class Remote {
   logEl: HTMLElement | null = null;
   lastSend: number = 0;
   socket?: ReconnectingWebsocket;
+  serialise: boolean;
+
 
   constructor(opts: Options = {remote: false}) {
     if (!opts.minMessageIntervalMs) opts.minMessageIntervalMs = 15;
+    if (!opts.serialise) opts.serialise = true;
     this.remote = opts.remote;
+    this.serialise = opts.serialise;
 
     // If sketch is hosted on Glitch, enable sockets, otherwise not
     if (opts.useSockets === undefined)
@@ -60,11 +65,12 @@ export default class Remote {
     const interval = Date.now() - this.lastSend;
     if (interval < this.minMessageIntervalMs) return;
 
-    const str = JSON.stringify({
+    const d = {
       from: this.ourId,
-      serial: this.serial++,
       ...data
-    });
+    }
+    if (this.serialise) d.serial = this.serial++;
+    const str = JSON.stringify(d);
 
     // Send out over sockets if ready
     if (this.socket && this.useSockets && this.socket.isReady()) this.socket.send(str);
@@ -77,15 +83,27 @@ export default class Remote {
     if (this.lastDataEl) this.lastDataEl.innerText = str;
     this.lastSend = Date.now();
 
+    if (this.serial > 1000) this.serial = 0;
   }
 
   seenMessage(o: any) {
+    if (!this.serialise) return false;
     if (!o.serial) return;
     if (!o.from) return;
 
     const lastSerial = this.receiveSerials.get(o.from);
+
     if (lastSerial) {
-      if (lastSerial >= o.serial) return true;
+      if (lastSerial === o.serial) {
+        return true; // Seen
+      }
+      if (lastSerial > o.serial) {
+        // Message being processed seems older than what we've already processed
+        if (o.serial < 10) {
+          // Since serial is low, be generous and assume a reset of serial numbers
+        } else return true; // Must be something we've seen before, ignore
+
+      }
     }
     this.receiveSerials.set(o.from, o.serial);
     return false;
