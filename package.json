@@ -1,0 +1,23 @@
+{
+  "name": "remote",
+  "version": "1.0.0",
+  "description": "",
+  "module": "./lib/index.js",
+  "files": [
+    "./lib/index.js"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^4.3.5"
+  },
+  "dependencies": {
+    "live-server": "^1.2.1",
+    "livereload": "^0.9.3"
+  }
+}
