@@ -1,4 +1,5 @@
 import ReconnectingWebsocket from "./ReconnectingWebsocket.js";
+import Intervals from './Intervals.js';
 
 interface Options {
   remote: boolean,
@@ -9,6 +10,7 @@ interface Options {
   useBroadcastChannel?: boolean,
   serialise?: boolean
 }
+
 
 export default class Remote {
   bc: BroadcastChannel | null = null;
@@ -25,11 +27,14 @@ export default class Remote {
   serial: number = 0;
   lastDataEl: HTMLElement | null = null;
   logEl: HTMLElement | null = null;
-  lastSend: number = 0;
-  lastReceive: number = 0;
+  activityEl: HTMLElement | null = null;
   socket?: ReconnectingWebsocket;
   serialise: boolean;
 
+  lastSend: number = 0;
+
+  sendInterval: Intervals = new Intervals(5);
+  receiveInterval: Intervals = new Intervals(5);
 
   constructor(opts: Options = {remote: false}) {
     if (!opts.minMessageIntervalMs) opts.minMessageIntervalMs = 15;
@@ -59,6 +64,8 @@ export default class Remote {
 
     if (this.useSockets) this.initSockets();
     if (this.useBroadcastChannel) this.initBroadcastChannel();
+
+
   }
 
   send(data: any) {
@@ -83,7 +90,7 @@ export default class Remote {
 
     if (this.lastDataEl) this.lastDataEl.innerText = str;
     this.lastSend = Date.now();
-
+    this.sendInterval.ping();
     if (this.serial > 1000) this.serial = 0;
   }
 
@@ -114,7 +121,7 @@ export default class Remote {
     try {
       const bc = new BroadcastChannel('remote');
       bc.onmessage = (evt) => {
-        this.lastReceive = Date.now();
+        this.receiveInterval.ping();
         try {
           const o = JSON.parse(evt.data);
           o.source = 'bc';
@@ -172,6 +179,50 @@ export default class Remote {
     }
     document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
 
+    const activityEl = document.getElementById('activity');
+    if (activityEl) {
+      this.activityEl = activityEl;
+      this.updateActivityLoop();
+    }
+  }
+
+  updateActivityLoop() {
+    this.updateActivity();
+    setTimeout(() => this.updateActivityLoop(), 500);
+  }
+
+  updateActivity() {
+    if (!this.activityEl) return;
+
+    let ws = '';
+    if (this.connected) {
+      ws = `<div style="background-color: green" title="WebSocket connected">WS</div>`
+    } else if (this.useSockets) {
+      ws = `<div style="background-color: red" title="WebSocket not connected">WS</div>`
+    } else {
+      ws = `<div style="background-color: gray" title="WebSocket disabled">WS</div>`
+
+    }
+
+    let bc = '';
+    if (this.bc) {
+      bc = `<div style="background-color: green" title="BroadcastChannel enabled">BC</div>`
+    } else if (this.useBroadcastChannel) {
+      bc = `<div style="background-color: red" title="BroadcastChannel not connected">BC</div>`
+    } else {
+      bc = `<div style="background-color: gray" title="BroadcastChannel disabled">BC</div>`
+
+    }
+
+
+    const elapsedReceiveS = this.receiveInterval.averageSeconds();
+    const elapsedReceiveHtml = isNaN(elapsedReceiveS) ? '' : `<div title="Average receive interval in seconds">R: ${elapsedReceiveS.toFixed(2)}</div>`;
+
+
+    const elapsedSendS = this.sendInterval.averageSeconds();
+    const elapsedSendHtml = isNaN(elapsedSendS) ? '' : `<div title="Average send interval in seconds">S: ${elapsedSendS.toFixed(2)}</div>`;
+
+    this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
   }
 
   setId(id: string) {
@@ -181,10 +232,6 @@ export default class Remote {
     this.log(`Source name changed to: ${id}`);
   }
 
-  receiveElapsed(): number | null {
-    if (this.lastReceive == 0) return null;
-    return Date.now() - this.lastReceive;
-  }
 
   initSockets() {
     if (!this.url)
@@ -207,7 +254,7 @@ export default class Remote {
       setConnected(false);
     }
     s.onmessage = (evt) => {
-      this.lastReceive = Date.now();
+      this.receiveInterval.ping();
       try {
         const o = JSON.parse(evt.data);
         if (o.from === this.ourId) return; // data is from ourself, ignore

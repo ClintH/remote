@@ -1,4 +1,5 @@
 import ReconnectingWebsocket from "./ReconnectingWebsocket.js";
+import Intervals from './Intervals.js';
 interface Options {
     remote: boolean;
     ourId?: string;
@@ -21,17 +22,20 @@ export default class Remote {
     serial: number;
     lastDataEl: HTMLElement | null;
     logEl: HTMLElement | null;
-    lastSend: number;
-    lastReceive: number;
+    activityEl: HTMLElement | null;
     socket?: ReconnectingWebsocket;
     serialise: boolean;
+    lastSend: number;
+    sendInterval: Intervals;
+    receiveInterval: Intervals;
     constructor(opts?: Options);
     send(data: any): void;
     seenMessage(o: any): boolean | undefined;
     initBroadcastChannel(): void;
     init(): void;
+    updateActivityLoop(): void;
+    updateActivity(): void;
     setId(id: string): void;
-    receiveElapsed(): number | null;
     initSockets(): void;
     onData(d: any): void;
     getId(): string | undefined;

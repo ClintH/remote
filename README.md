@@ -81,6 +81,39 @@ const r = new Remote({
 });
 ```
 
+## Diagnostics
+
+If an element with id 'activity' is on the page, it will be used to display connection status and send/receive rates.
+
+
+```html
+<div id="activity"></div>
+```
+
+Suggested styling:
+
+```css
+#activity {
+  opacity: 0.1;
+  display: flex;
+  position: fixed;
+  font-size: xx-small;
+  right:0;
+  bottom: 0;
+  background-color: darkgray;
+  user-select: none;
+}
+
+#activity:hover {
+  opacity: 1.0;
+}
+
+#activity>div {
+  padding: 0.2em;
+  border: 1px solid white;
+}
+```
+
 ## Remote helper
 
 The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Enable it by setting `remote` to true in the options.

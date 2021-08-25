@@ -366,6 +366,79 @@ class ReconnectingWebSocket {
     }
 }
 
+class SlidingWindow {
+    constructor(size = 5) {
+        this.data = [];
+        this.index = 0;
+        this.size = size;
+        for (let i = 0; i < size; i++) {
+            this.data[i] = NaN;
+        }
+    }
+    push(v) {
+        let idx = this.index;
+        this.data[idx++] = v;
+        if (idx == this.size)
+            idx = 0;
+        this.index = idx;
+    }
+    average() {
+        let total = 0;
+        let samples = 0;
+        for (let i = 0; i < this.size; i++) {
+            if (isNaN(this.data[i]))
+                continue;
+            total += this.data[i];
+            samples++;
+        }
+        return total / samples;
+    }
+    max() {
+        let max = Number.MIN_SAFE_INTEGER;
+        for (let i = 0; i < this.size; i++) {
+            if (isNaN(this.data[i]))
+                continue;
+            max = Math.max(this.data[i], max);
+        }
+        return max;
+    }
+    min() {
+        let min = Number.MAX_SAFE_INTEGER;
+        for (let i = 0; i < this.size; i++) {
+            if (isNaN(this.data[i]))
+                continue;
+            min = Math.min(this.data[i], min);
+        }
+        return min;
+    }
+}
+
+class Intervals {
+    constructor(size = 5) {
+        this.last = 0;
+        this.avg = new SlidingWindow(size);
+    }
+    ping() {
+        if (this.last == 0) {
+            this.last = Date.now();
+            return;
+        }
+        let elapsed = Date.now() - this.last;
+        this.last = Date.now();
+        this.avg.push(elapsed);
+    }
+    averageSeconds() {
+        let avg = this.avg.average();
+        if (isNaN(avg))
+            return avg;
+        avg /= 1000;
+        return avg;
+    }
+    average() {
+        return this.avg.average();
+    }
+}
+
 class Remote {
     constructor(opts = { remote: false }) {
         this.bc = null;
@@ -376,8 +449,10 @@ class Remote {
         this.serial = 0;
         this.lastDataEl = null;
         this.logEl = null;
+        this.activityEl = null;
         this.lastSend = 0;
-        this.lastReceive = 0;
+        this.sendInterval = new Intervals(5);
+        this.receiveInterval = new Intervals(5);
         if (!opts.minMessageIntervalMs)
             opts.minMessageIntervalMs = 15;
         if (!opts.serialise)
@@ -426,6 +501,7 @@ class Remote {
         if (this.lastDataEl)
             this.lastDataEl.innerText = str;
         this.lastSend = Date.now();
+        this.sendInterval.ping();
         if (this.serial > 1000)
             this.serial = 0;
     }
@@ -454,7 +530,7 @@ class Remote {
         try {
             const bc = new BroadcastChannel('remote');
             bc.onmessage = (evt) => {
-                this.lastReceive = Date.now();
+                this.receiveInterval.ping();
                 try {
                     const o = JSON.parse(evt.data);
                     o.source = 'bc';
@@ -503,17 +579,50 @@ class Remote {
             });
         }
         document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
+        const activityEl = document.getElementById('activity');
+        if (activityEl) {
+            this.activityEl = activityEl;
+            this.updateActivityLoop();
+        }
+    }
+    updateActivityLoop() {
+        this.updateActivity();
+        setTimeout(() => this.updateActivityLoop(), 500);
+    }
+    updateActivity() {
+        if (!this.activityEl)
+            return;
+        let ws = '';
+        if (this.connected) {
+            ws = `<div style="background-color: green" title="WebSocket connected">WS</div>`;
+        }
+        else if (this.useSockets) {
+            ws = `<div style="background-color: red" title="WebSocket not connected">WS</div>`;
+        }
+        else {
+            ws = `<div style="background-color: gray" title="WebSocket disabled">WS</div>`;
+        }
+        let bc = '';
+        if (this.bc) {
+            bc = `<div style="background-color: green" title="BroadcastChannel enabled">BC</div>`;
+        }
+        else if (this.useBroadcastChannel) {
+            bc = `<div style="background-color: red" title="BroadcastChannel not connected">BC</div>`;
+        }
+        else {
+            bc = `<div style="background-color: gray" title="BroadcastChannel disabled">BC</div>`;
+        }
+        const elapsedReceiveS = this.receiveInterval.averageSeconds();
+        const elapsedReceiveHtml = isNaN(elapsedReceiveS) ? '' : `<div title="Average receive interval in seconds">R: ${elapsedReceiveS.toFixed(2)}</div>`;
+        const elapsedSendS = this.sendInterval.averageSeconds();
+        const elapsedSendHtml = isNaN(elapsedSendS) ? '' : `<div title="Average send interval in seconds">S: ${elapsedSendS.toFixed(2)}</div>`;
+        this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
     }
     setId(id) {
         window.localStorage.setItem('remoteId', id);
         this.ourId = id;
         this.serial = 0;
         this.log(`Source name changed to: ${id}`);
-    }
-    receiveElapsed() {
-        if (this.lastReceive == 0)
-            return null;
-        return Date.now() - this.lastReceive;
     }
     initSockets() {
         if (!this.url)
@@ -537,7 +646,7 @@ class Remote {
             setConnected(false);
         };
         s.onmessage = (evt) => {
-            this.lastReceive = Date.now();
+            this.receiveInterval.ping();
             try {
                 const o = JSON.parse(evt.data);
                 if (o.from === this.ourId)
