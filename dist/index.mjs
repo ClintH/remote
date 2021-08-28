@@ -492,14 +492,17 @@ class Remote {
         };
         if (this.serialise)
             d.serial = this.serial++;
-        const str = JSON.stringify(d);
+        let str = JSON.stringify(d);
         if (this.socket && this.useSockets && this.socket.isReady())
             this.socket.send(str);
         if (this.useBroadcastChannel && this.bc) {
             this.bc.postMessage(str);
         }
-        if (this.lastDataEl)
+        if (this.lastDataEl) {
+            if (str.length > 500)
+                str = str.substring(0, 500) + '...';
             this.lastDataEl.innerText = str;
+        }
         this.lastSend = Date.now();
         this.sendInterval.ping();
         if (this.serial > 1000)
@@ -560,11 +563,6 @@ class Remote {
             window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
         }
         if (this.ourId === undefined) {
-            const v = window.localStorage.getItem('remoteId');
-            if (v !== null)
-                this.ourId = v;
-        }
-        if (this.ourId === undefined) {
             this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
         }
         const txtSourceName = document.getElementById('txtSourceName');
@@ -612,14 +610,13 @@ class Remote {
         else {
             bc = `<div style="background-color: gray" title="BroadcastChannel disabled">BC</div>`;
         }
-        const elapsedReceiveS = this.receiveInterval.averageSeconds();
-        const elapsedReceiveHtml = isNaN(elapsedReceiveS) ? '' : `<div title="Average receive interval in seconds">R: ${elapsedReceiveS.toFixed(2)}</div>`;
-        const elapsedSendS = this.sendInterval.averageSeconds();
-        const elapsedSendHtml = isNaN(elapsedSendS) ? '' : `<div title="Average send interval in seconds">S: ${elapsedSendS.toFixed(2)}</div>`;
+        const elapsedReceiveMs = this.receiveInterval.average();
+        const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in seconds">R: ${Math.floor(elapsedReceiveMs)}</div>`;
+        const elapsedSendMs = this.sendInterval.average();
+        const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in seconds">S: ${Math.floor(elapsedSendMs)}</div>`;
         this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
     }
     setId(id) {
-        window.localStorage.setItem('remoteId', id);
         this.ourId = id;
         this.serial = 0;
         this.log(`Source name changed to: ${id}`);

@@ -51,7 +51,6 @@ remote (boolean)
   
 ourId (string)
 * Each sketch has an id, allowing you to distinguish where data is coming from.
-* Ids are saved to `localStorage`, so reopening a sketch means it will maintain the same id
 * Default: it creates a random id
 
 url (string, default: same hostname)

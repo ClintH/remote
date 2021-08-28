@@ -78,7 +78,7 @@ export default class Remote {
       ...data
     }
     if (this.serialise) d.serial = this.serial++;
-    const str = JSON.stringify(d);
+    let str = JSON.stringify(d);
 
     // Send out over sockets if ready
     if (this.socket && this.useSockets && this.socket.isReady()) this.socket.send(str);
@@ -88,7 +88,10 @@ export default class Remote {
       this.bc.postMessage(str);
     }
 
-    if (this.lastDataEl) this.lastDataEl.innerText = str;
+    if (this.lastDataEl) {
+      if (str.length > 500) str = str.substring(0, 500) + '...';
+      this.lastDataEl.innerText = str;
+    }
     this.lastSend = Date.now();
     this.sendInterval.ping();
     if (this.serial > 1000) this.serial = 0;
@@ -157,12 +160,6 @@ export default class Remote {
     }
 
     if (this.ourId === undefined) {
-      // No manual id? Try using the last
-      const v = window.localStorage.getItem('remoteId');
-      if (v !== null) this.ourId = v;
-    }
-
-    if (this.ourId === undefined) {
       // Still no id? Make a random one
       this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
     }
@@ -215,18 +212,17 @@ export default class Remote {
     }
 
 
-    const elapsedReceiveS = this.receiveInterval.averageSeconds();
-    const elapsedReceiveHtml = isNaN(elapsedReceiveS) ? '' : `<div title="Average receive interval in seconds">R: ${elapsedReceiveS.toFixed(2)}</div>`;
+    const elapsedReceiveMs = this.receiveInterval.average();
+    const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in seconds">R: ${Math.floor(elapsedReceiveMs)}</div>`;
 
 
-    const elapsedSendS = this.sendInterval.averageSeconds();
-    const elapsedSendHtml = isNaN(elapsedSendS) ? '' : `<div title="Average send interval in seconds">S: ${elapsedSendS.toFixed(2)}</div>`;
+    const elapsedSendMs = this.sendInterval.average();
+    const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in seconds">S: ${Math.floor(elapsedSendMs)}</div>`;
 
     this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
   }
 
   setId(id: string) {
-    window.localStorage.setItem('remoteId', id);
     this.ourId = id;
     this.serial = 0;
     this.log(`Source name changed to: ${id}`);
