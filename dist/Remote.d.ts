@@ -8,6 +8,7 @@ interface Options {
     minMessageIntervalMs?: number;
     useBroadcastChannel?: boolean;
     serialise?: boolean;
+    matchIds?: boolean;
 }
 export default class Remote {
     bc: BroadcastChannel | null;
@@ -18,6 +19,7 @@ export default class Remote {
     ourId?: string;
     url?: string;
     minMessageIntervalMs: number;
+    matchIds: boolean;
     receiveSerials: Map<string, number>;
     serial: number;
     lastDataEl: HTMLElement | null;

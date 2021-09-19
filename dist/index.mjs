@@ -445,6 +445,7 @@ class Remote {
         this.connected = false;
         this.useSockets = false;
         this.useBroadcastChannel = false;
+        this.matchIds = false;
         this.receiveSerials = new Map();
         this.serial = 0;
         this.lastDataEl = null;
@@ -457,6 +458,8 @@ class Remote {
             opts.minMessageIntervalMs = 15;
         if (!opts.serialise)
             opts.serialise = true;
+        if (opts.matchIds)
+            this.matchIds = true;
         this.remote = opts.remote;
         this.serialise = opts.serialise;
         if (opts.useSockets === undefined)
@@ -537,6 +540,8 @@ class Remote {
                 try {
                     const o = JSON.parse(evt.data);
                     o.source = 'bc';
+                    if (this.matchIds && o.from !== this.ourId)
+                        return;
                     if (!this.seenMessage(o))
                         this.onData(o);
                 }
@@ -563,7 +568,21 @@ class Remote {
             window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
         }
         if (this.ourId === undefined) {
+            try {
+                let id = window.localStorage.getItem('id');
+                if (id)
+                    this.setId(id);
+            }
+            catch (e) { }
+        }
+        if (this.ourId === undefined) {
             this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
+            if (this.ourId) {
+                try {
+                    window.localStorage.setItem('id', this.ourId);
+                }
+                catch (e) { }
+            }
         }
         const txtSourceName = document.getElementById('txtSourceName');
         if (txtSourceName) {
@@ -644,17 +663,19 @@ class Remote {
         };
         s.onmessage = (evt) => {
             this.receiveInterval.ping();
+            if (evt.data === 'connected')
+                return;
             try {
                 const o = JSON.parse(evt.data);
-                if (o.from === this.ourId)
-                    return;
                 o.source = 'ws';
+                if (this.matchIds && o.from !== this.ourId)
+                    return;
                 if (!this.seenMessage(o))
                     this.onData(o);
             }
             catch (err) {
                 this.error(err);
-                this.log('Data: ' + JSON.stringify(evt.data));
+                this.log('Ws Data: ' + JSON.stringify(evt.data));
             }
         };
         this.socket = s;

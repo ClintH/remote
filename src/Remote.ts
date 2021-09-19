@@ -8,7 +8,8 @@ interface Options {
   useSockets?: boolean,
   minMessageIntervalMs?: number,
   useBroadcastChannel?: boolean,
-  serialise?: boolean
+  serialise?: boolean,
+  matchIds?: boolean
 }
 
 
@@ -21,7 +22,7 @@ export default class Remote {
   ourId?: string;
   url?: string;
   minMessageIntervalMs: number;
-
+  matchIds: boolean = false;
 
   receiveSerials: Map<string, number> = new Map();
   serial: number = 0;
@@ -39,6 +40,7 @@ export default class Remote {
   constructor(opts: Options = {remote: false}) {
     if (!opts.minMessageIntervalMs) opts.minMessageIntervalMs = 15;
     if (!opts.serialise) opts.serialise = true;
+    if (opts.matchIds) this.matchIds = true;
     this.remote = opts.remote;
     this.serialise = opts.serialise;
 
@@ -128,6 +130,8 @@ export default class Remote {
         try {
           const o = JSON.parse(evt.data);
           o.source = 'bc';
+          if (this.matchIds && o.from !== this.ourId) return;
+
           if (!this.seenMessage(o))
             this.onData(o);
         } catch (err) {
@@ -160,8 +164,22 @@ export default class Remote {
     }
 
     if (this.ourId === undefined) {
+      // Still no id? Is there something saved?
+      try {
+        let id = window.localStorage.getItem('id');
+        if (id) this.setId(id);
+      } catch (e) {}
+    }
+
+    if (this.ourId === undefined) {
       // Still no id? Make a random one
       this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
+
+      if (this.ourId) {
+        try {
+          window.localStorage.setItem('id', this.ourId);
+        } catch (e) {}
+      }
     }
 
     // Wire up some elements if they are present
@@ -228,7 +246,6 @@ export default class Remote {
     this.log(`Source name changed to: ${id}`);
   }
 
-
   initSockets() {
     if (!this.url)
       this.url = (location.protocol === 'http:' ? 'ws://' : 'wss://') + location.host + '/ws';
@@ -251,16 +268,15 @@ export default class Remote {
     }
     s.onmessage = (evt) => {
       this.receiveInterval.ping();
+      if (evt.data === 'connected') return; // Just a status
       try {
         const o = JSON.parse(evt.data);
-        if (o.from === this.ourId) return; // data is from ourself, ignore
         o.source = 'ws';
-
+        if (this.matchIds && o.from !== this.ourId) return;
         if (!this.seenMessage(o)) this.onData(o);
-
       } catch (err) {
         this.error(err);
-        this.log('Data: ' + JSON.stringify(evt.data));
+        this.log('Ws Data: ' + JSON.stringify(evt.data));
       }
     };
     this.socket = s;

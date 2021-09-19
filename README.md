@@ -35,10 +35,13 @@ r.onData = (d) => {
 ```
 
 
-
 ## Options
 
 When creating a new instance, options can be set to customise behaviour:
+
+matchIds (boolean)
+* When true, receiver only processes messages from a sender with same id.
+* Default: false
 
 serialise (boolean)
 * When true, outgoing messages are given a serial number. Incoming messages are discarded if they are below the last serial number received from a given source
