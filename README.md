@@ -48,8 +48,8 @@ serialise (boolean)
 * Serials reset after 10,000
 * Default: true
 
-remote (boolean)
-* When true, the library actives its 'remote helper' feature, see below for more details
+disableRemote (boolean)
+* When true, the library does not activate its 'remote helper' feature, see below for more details
 * Default: false
   
 ourId (string)
@@ -118,7 +118,9 @@ Suggested styling:
 
 ## Remote helper
 
-The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Enable it by setting `remote` to true in the options.
+The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Features of the remote helper are automatically enabled if elements with the necessary ids are present ont he page.
+
+Disable the remote helper by setting `disableRemote` to true in the options.
 
 To use this, make sure your HTML page contains:
 
@@ -136,5 +138,6 @@ When enabled:
 
 # Credits
 
-Bundles Pedro Ladaria's [Reconnecting-Websocket](https://github.com/pladaria/reconnecting-websocket)
-
+Bundles:
+* Pedro Ladaria's [Reconnecting-Websocket](https://github.com/pladaria/reconnecting-websocket)
+* [BroadcastChannel polyfill](https://gist.github.com/sechel/e6aff22d9e56df02c5bd09c4afc516e6)

@@ -2,7 +2,7 @@ import ReconnectingWebsocket from "./ReconnectingWebsocket.js";
 import Intervals from './Intervals.js';
 
 interface Options {
-  remote: boolean,
+  disableRemote: boolean,
   ourId?: string,
   url?: string,
   useSockets?: boolean,
@@ -15,7 +15,7 @@ interface Options {
 
 export default class Remote {
   bc: BroadcastChannel | null = null;
-  remote: boolean;
+  disableRemote: boolean;
   connected: boolean = false;
   useSockets: boolean = false;
   useBroadcastChannel: boolean = false;
@@ -23,6 +23,7 @@ export default class Remote {
   url?: string;
   minMessageIntervalMs: number;
   matchIds: boolean = false;
+  consoleRedirected = false;
 
   receiveSerials: Map<string, number> = new Map();
   serial: number = 0;
@@ -37,11 +38,11 @@ export default class Remote {
   sendInterval: Intervals = new Intervals(5);
   receiveInterval: Intervals = new Intervals(5);
 
-  constructor(opts: Options = {remote: false}) {
+  constructor(opts: Options = {disableRemote: false}) {
     if (!opts.minMessageIntervalMs) opts.minMessageIntervalMs = 15;
     if (!opts.serialise) opts.serialise = true;
     if (opts.matchIds) this.matchIds = true;
-    this.remote = opts.remote;
+    this.disableRemote = opts.disableRemote;
     this.serialise = opts.serialise;
 
     // If sketch is hosted on Glitch, enable sockets, otherwise not
@@ -90,7 +91,7 @@ export default class Remote {
       this.bc.postMessage(str);
     }
 
-    if (this.lastDataEl) {
+    if (this.lastDataEl && !this.disableRemote) {
       if (str.length > 500) str = str.substring(0, 500) + '...';
       this.lastDataEl.innerText = str;
     }
@@ -151,7 +152,9 @@ export default class Remote {
     this.lastDataEl = document.getElementById('lastData');
 
     // On mobile, won't see console, so add it to HTML
-    if (this.remote) {
+    const hasLogEl = document.getElementById('log') !== null;
+    if (!this.disableRemote && hasLogEl) {
+      this.consoleRedirected = true;
       // @ts-ignore
       console.log2 = console.log;
       // @ts-ignore
@@ -161,6 +164,8 @@ export default class Remote {
 
       // Log any uncaught errors
       window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
+
+      document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
     }
 
     if (this.ourId === undefined) {
@@ -192,7 +197,7 @@ export default class Remote {
         this.setId(id);
       });
     }
-    document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
+
 
     const activityEl = document.getElementById('activity');
     if (activityEl) {
@@ -231,11 +236,11 @@ export default class Remote {
 
 
     const elapsedReceiveMs = this.receiveInterval.average();
-    const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in seconds">R: ${Math.floor(elapsedReceiveMs)}</div>`;
+    const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in ms">R: ${Math.floor(elapsedReceiveMs)}</div>`;
 
 
     const elapsedSendMs = this.sendInterval.average();
-    const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in seconds">S: ${Math.floor(elapsedSendMs)}</div>`;
+    const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in ms">S: ${Math.floor(elapsedSendMs)}</div>`;
 
     this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
   }
@@ -298,7 +303,7 @@ export default class Remote {
   log(msg: any) {
     if (typeof msg === 'object') msg = JSON.stringify(msg);
     // @ts-ignore
-    if (this.remote && console.log2) console.log2(msg);
+    if (this.consoleRedirected && console.log2) console.log2(msg);
     else console.log(msg);
 
     const html = `<div>${msg}</div>`;
@@ -307,7 +312,7 @@ export default class Remote {
 
   error(msg: string | Event, exception?: Error) {
     // @ts-ignore
-    if (this.remote && console.error2) console.error2(msg);
+    if (this.consoleRedirected && console.error2) console.error2(msg);
     else console.error(msg);
     let html = `<div class="error">${msg}</div>`;
     if (exception?.stack)

@@ -1,12 +1,13 @@
 import ReconnectingWebsocket from "./ReconnectingWebsocket.js";
 import Intervals from './Intervals.js';
 export default class Remote {
-    constructor(opts = { remote: false }) {
+    constructor(opts = { disableRemote: false }) {
         this.bc = null;
         this.connected = false;
         this.useSockets = false;
         this.useBroadcastChannel = false;
         this.matchIds = false;
+        this.consoleRedirected = false;
         this.receiveSerials = new Map();
         this.serial = 0;
         this.lastDataEl = null;
@@ -21,7 +22,7 @@ export default class Remote {
             opts.serialise = true;
         if (opts.matchIds)
             this.matchIds = true;
-        this.remote = opts.remote;
+        this.disableRemote = opts.disableRemote;
         this.serialise = opts.serialise;
         if (opts.useSockets === undefined)
             this.useSockets = location.host.endsWith('glitch.me') || false;
@@ -62,7 +63,7 @@ export default class Remote {
         if (this.useBroadcastChannel && this.bc) {
             this.bc.postMessage(str);
         }
-        if (this.lastDataEl) {
+        if (this.lastDataEl && !this.disableRemote) {
             if (str.length > 500)
                 str = str.substring(0, 500) + '...';
             this.lastDataEl.innerText = str;
@@ -122,12 +123,15 @@ export default class Remote {
     init() {
         this.logEl = document.getElementById('log');
         this.lastDataEl = document.getElementById('lastData');
-        if (this.remote) {
+        const hasLogEl = document.getElementById('log') !== null;
+        if (!this.disableRemote && hasLogEl) {
+            this.consoleRedirected = true;
             console.log2 = console.log;
             console.error2 = console.error;
             console.log = this.log.bind(this);
             console.error = this.error.bind(this);
             window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
+            document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
         }
         if (this.ourId === undefined) {
             try {
@@ -157,7 +161,6 @@ export default class Remote {
                 this.setId(id);
             });
         }
-        document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
         const activityEl = document.getElementById('activity');
         if (activityEl) {
             this.activityEl = activityEl;
@@ -192,9 +195,9 @@ export default class Remote {
             bc = `<div style="background-color: gray" title="BroadcastChannel disabled">BC</div>`;
         }
         const elapsedReceiveMs = this.receiveInterval.average();
-        const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in seconds">R: ${Math.floor(elapsedReceiveMs)}</div>`;
+        const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in ms">R: ${Math.floor(elapsedReceiveMs)}</div>`;
         const elapsedSendMs = this.sendInterval.average();
-        const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in seconds">S: ${Math.floor(elapsedSendMs)}</div>`;
+        const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in ms">S: ${Math.floor(elapsedSendMs)}</div>`;
         this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
     }
     setId(id) {
@@ -254,7 +257,7 @@ export default class Remote {
     log(msg) {
         if (typeof msg === 'object')
             msg = JSON.stringify(msg);
-        if (this.remote && console.log2)
+        if (this.consoleRedirected && console.log2)
             console.log2(msg);
         else
             console.log(msg);
@@ -262,7 +265,7 @@ export default class Remote {
         this.logEl?.insertAdjacentHTML('afterbegin', html);
     }
     error(msg, exception) {
-        if (this.remote && console.error2)
+        if (this.consoleRedirected && console.error2)
             console.error2(msg);
         else
             console.error(msg);

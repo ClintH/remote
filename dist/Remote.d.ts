@@ -1,7 +1,7 @@
 import ReconnectingWebsocket from "./ReconnectingWebsocket.js";
 import Intervals from './Intervals.js';
 interface Options {
-    remote: boolean;
+    disableRemote: boolean;
     ourId?: string;
     url?: string;
     useSockets?: boolean;
@@ -12,7 +12,7 @@ interface Options {
 }
 export default class Remote {
     bc: BroadcastChannel | null;
-    remote: boolean;
+    disableRemote: boolean;
     connected: boolean;
     useSockets: boolean;
     useBroadcastChannel: boolean;
@@ -20,6 +20,7 @@ export default class Remote {
     url?: string;
     minMessageIntervalMs: number;
     matchIds: boolean;
+    consoleRedirected: boolean;
     receiveSerials: Map<string, number>;
     serial: number;
     lastDataEl: HTMLElement | null;
