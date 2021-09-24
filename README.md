@@ -83,10 +83,42 @@ const r = new Remote({
 });
 ```
 
+## Ids
+
+Each sent message is stamped with a sender id. This can be useful to distinguish between different message sources. For example:
+
+```js
+r.onData = (d) => {
+  if (d.from === 'a') {
+    // handle message from source a
+  } else if (d.from === 'b' || d.from === 'c') {
+    // handle messages from b or c
+  } else {
+    // handle messages from any other source
+  }
+}
+```
+
+If you set `matchId` to true in the receiving Remote's initialiser, it will automatically discard messages that don't match its own id. That is, both sender and receiver must use the same id. 
+
+Ids can be set in code using the initialiser of the Remote instance, or using `setId`:
+
+```js
+const r = new Remote({
+  ourId: 'a',
+});
+
+// Or:
+r.setId('b');
+```
+
+Since you may want to use the same remote code for multiple sources, Remote makes it simple to offer interactive control of the id. If there is a HTML text box with id 'txtSourceName', it will automatically be wired up to control the id.
+
+If no prior id was found, a random id is generated. If a previous random id was generated in this browser, it is used instead.
+
 ## Diagnostics
 
 If an element with id 'activity' is on the page, it will be used to display connection status and send/receive rates.
-
 
 ```html
 <div id="activity"></div>
