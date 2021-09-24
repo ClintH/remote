@@ -34,41 +34,58 @@ r.onData = (d) => {
 }
 ```
 
+# Security & privacy
 
-## Options
+## Broadcast channel
+
+The broadcast channel means of communication can be considered safe. Messages received are only from your own code, and the data you send won't leave your machine.
+
+## Web sockets
+
+Sending and receiving data via web sockets has some inherent risk because it travels via the internet. Using a `wss://` URL means that messages are encrypted between sender/receiver and the server, but this doesn't necessarily give much protection.
+
+In principle, any web socket client can connect to your web socket server and receive or send data. It is up to your server implementation to control which clients are allowed to connect, which messages are accepted for distribution, and which clients receive which messages.
+
+In naïve implementations, the web socket server simply distributes received messages to all connected clients, and all connected clients are permitted to send messages. Turning off your server when not in use and using a random name for your server can reduce risk of misuse. 
+
+Running your web socket server on your own machine will also provide protection, because your operating system and network will not allow random traffic from the internet to reach your server (unless you have specifically configured it differently).
+
+In short, be mindful of what you are sending when using a publicly-available server. When listening for data, in some cases you need to be mindful that the data may be coming from an untrusted source.
+
+# Options
 
 When creating a new instance, options can be set to customise behaviour:
 
-matchIds (boolean)
+`matchIds` (boolean)
 * When true, receiver only processes messages from a sender with same id.
 * Default: false
 
-serialise (boolean)
+`serialise` (boolean)
 * When true, outgoing messages are given a serial number. Incoming messages are discarded if they are below the last serial number received from a given source
 * Serials reset after 10,000
 * Default: true
 
-disableRemote (boolean)
+`disableRemote` (boolean)
 * When true, the library does not activate its 'remote helper' feature, see below for more details
 * Default: false
   
-ourId (string)
+`ourId` (string)
 * Each sketch has an id, allowing you to distinguish where data is coming from.
 * Default: it creates a random id
 
-url (string, default: same hostname)
+`url` (string, default: same hostname)
 * Url for websocket server, if used. Eg: `wss://localhost:8080/ws`. Make sure you use `wss://` for secure data.
 * Default: it will try to connect to `wss:// ... /ws` on the same hostname where the sketch is loaded from.
 
-useSockets (boolean)
+`useSockets` (boolean)
 * If true, it will attempt to connect to the websockets server specified by the `url` option
 * Default: Enables websockets if sketch is loaded from Glitch, otherwise defaults to false
 
-useBroadcastChannel (boolean)
+`useBroadcastChannel` (boolean)
 * If true, broadcast channel will be used for inter-window communication
 * Default: Off if useSockets is true
 
-minMessageIntervalMs (number)
+`minMessageIntervalMs` (number)
 * To prevent message backlogging, the library will silently drop messages if they arrive quicker than this rate. Eg, if the value is 100, messages will only be broadcast after 100ms elapses from the last message.
 * Keep in mind messages are not cached/queued
 * Default: 15
@@ -83,7 +100,7 @@ const r = new Remote({
 });
 ```
 
-## Ids
+# Ids
 
 Each sent message is stamped with a sender id. This can be useful to distinguish between different message sources. For example:
 
@@ -116,7 +133,7 @@ Since you may want to use the same remote code for multiple sources, Remote make
 
 If no prior id was found, a random id is generated. If a previous random id was generated in this browser, it is used instead.
 
-## Diagnostics
+# Diagnostics
 
 If an element with id 'activity' is on the page, it will be used to display connection status and send/receive rates.
 
@@ -148,9 +165,9 @@ Suggested styling:
 }
 ```
 
-## Remote helper
+# Remote helper
 
-The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Features of the remote helper are automatically enabled if elements with the necessary ids are present ont he page.
+The remote helper is useful if your sketch is running on a mobile device when you do not have easy access to DevTools. Features of the remote helper are automatically enabled if elements with the necessary ids are present on the page.
 
 Disable the remote helper by setting `disableRemote` to true in the options.
 
