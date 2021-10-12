@@ -34,6 +34,12 @@ r.onData = (d) => {
 }
 ```
 
+# Web Socket server
+
+A naïve web socket server implementation is provided in the `server` folder. This can run on Glitch, or locally.
+
+To run it locally, you need to have Nodejs installed. After that, run `npm install` in the folder to install dependencies. After that, it can be started with `node server.js`.
+
 # Security & privacy
 
 ## Broadcast channel
@@ -61,7 +67,8 @@ When creating a new instance, options can be set to customise behaviour:
 * Default: false
 
 `serialise` (boolean)
-* When true, outgoing messages are given a serial number. Incoming messages are discarded if they are below the last serial number received from a given source
+* When true, outgoing messages are given a serial number. Incoming messages are discarded if they are below the last serial number received from a given source. This avoids processing the same message from the same source delivered by both web sockets and broadcast channel.
+* It is safe to set this to false if you are explicitly only using one channel of communication
 * Serials reset after 10,000
 * Default: true
 
@@ -71,7 +78,7 @@ When creating a new instance, options can be set to customise behaviour:
   
 `ourId` (string)
 * Each sketch has an id, allowing you to distinguish where data is coming from.
-* Default: it creates a random id
+* Default: it creates a random id, or previously used random id.
 
 `url` (string, default: same hostname)
 * Url for websocket server, if used. Eg: `wss://localhost:8080/ws`. Make sure you use `wss://` for secure data.
@@ -86,8 +93,8 @@ When creating a new instance, options can be set to customise behaviour:
 * Default: Off if useSockets is true
 
 `minMessageIntervalMs` (number)
-* To prevent message backlogging, the library will silently drop messages if they arrive quicker than this rate. Eg, if the value is 100, messages will only be broadcast after 100ms elapses from the last message.
-* Keep in mind messages are not cached/queued
+* To prevent message backlogging, the library will silently drop messages if they arrive quicker than this rate. Eg, if the value is 100, messages will only be broadcast after 100ms elapses since the last message.
+* Keep in mind messages are not cached/queued, they are thrown away
 * Default: 15
 
 Eg:
@@ -184,6 +191,7 @@ When enabled:
 * If #logTitle is clicked, #log will be cleared (if this element is present)
 * The last sent data is displayed in #lastData (if this element is present)
 
+By default the in-page logging will be truncated at 150 items, with older entries being discarded. This prevents the DOM from being choked with a huge amount of items if logging frequency is high. The limit can be changed by setting `r.logLimit` to something else. Zero or below disables truncation entirely.
 
 # Credits
 

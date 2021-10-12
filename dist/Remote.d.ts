@@ -29,6 +29,7 @@ export default class Remote {
     socket?: ReconnectingWebsocket;
     serialise: boolean;
     lastSend: number;
+    logLimit: number;
     sendInterval: Intervals;
     receiveInterval: Intervals;
     constructor(opts?: Options);
@@ -43,6 +44,7 @@ export default class Remote {
     onData(d: any): void;
     getId(): string | undefined;
     clearLog(): void;
+    truncate(): void;
     log(msg: any): void;
     error(msg: string | Event, exception?: Error): void;
 }

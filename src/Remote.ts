@@ -34,6 +34,7 @@ export default class Remote {
   serialise: boolean;
 
   lastSend: number = 0;
+  logLimit: number = 150; // How many log entries to keep
 
   sendInterval: Intervals = new Intervals(5);
   receiveInterval: Intervals = new Intervals(5);
@@ -300,7 +301,18 @@ export default class Remote {
       this.logEl.innerHTML = '';
   }
 
+  truncate() {
+    if (this.logEl && this.logLimit > 0) {
+      if (this.logEl.children.length > this.logLimit) {
+        // @ts-ignore
+        this.logEl.removeChild(this.logEl.lastChild);
+      }
+    }
+  }
+
   log(msg: any) {
+    if (msg === undefined) msg = '(undefined)';
+
     if (typeof msg === 'object') msg = JSON.stringify(msg);
     // @ts-ignore
     if (this.consoleRedirected && console.log2) console.log2(msg);
@@ -308,9 +320,12 @@ export default class Remote {
 
     const html = `<div>${msg}</div>`;
     this.logEl?.insertAdjacentHTML('afterbegin', html);
+    this.truncate();
   }
 
   error(msg: string | Event, exception?: Error) {
+    if (msg === undefined) msg = '(undefined)';
+
     // @ts-ignore
     if (this.consoleRedirected && console.error2) console.error2(msg);
     else console.error(msg);
@@ -318,5 +333,7 @@ export default class Remote {
     if (exception?.stack)
       html += `<div class="error">${exception.stack}</div>`
     this.logEl?.insertAdjacentHTML('afterbegin', html);
+    this.truncate();
+
   }
 }

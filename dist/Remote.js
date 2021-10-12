@@ -14,6 +14,7 @@ export default class Remote {
         this.logEl = null;
         this.activityEl = null;
         this.lastSend = 0;
+        this.logLimit = 150;
         this.sendInterval = new Intervals(5);
         this.receiveInterval = new Intervals(5);
         if (!opts.minMessageIntervalMs)
@@ -254,7 +255,16 @@ export default class Remote {
         if (this.logEl)
             this.logEl.innerHTML = '';
     }
+    truncate() {
+        if (this.logEl && this.logLimit > 0) {
+            if (this.logEl.children.length > this.logLimit) {
+                this.logEl.removeChild(this.logEl.lastChild);
+            }
+        }
+    }
     log(msg) {
+        if (msg === undefined)
+            msg = '(undefined)';
         if (typeof msg === 'object')
             msg = JSON.stringify(msg);
         if (this.consoleRedirected && console.log2)
@@ -263,8 +273,11 @@ export default class Remote {
             console.log(msg);
         const html = `<div>${msg}</div>`;
         this.logEl?.insertAdjacentHTML('afterbegin', html);
+        this.truncate();
     }
     error(msg, exception) {
+        if (msg === undefined)
+            msg = '(undefined)';
         if (this.consoleRedirected && console.error2)
             console.error2(msg);
         else
@@ -273,6 +286,7 @@ export default class Remote {
         if (exception?.stack)
             html += `<div class="error">${exception.stack}</div>`;
         this.logEl?.insertAdjacentHTML('afterbegin', html);
+        this.truncate();
     }
 }
 //# sourceMappingURL=Remote.js.map
