@@ -1,9 +1,12 @@
 import {Remote} from "../dist/index.mjs";
 
+// Create a Remote instance
 const r = new Remote({
-  remote: true // true because this is the sender
+  // no options needed by default
+  // see README for examples  
 });
 
+// When data is received, log it.
 r.onData = (d) => {
   console.log(d);
 }
