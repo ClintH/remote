@@ -2,7 +2,7 @@
 
 Remote tries to simplify sending data to and from running sketches. It allows you to decouple sketches, thus making it easy to run components on different devices or simply in different windows.
 
-It uses [WebRTC](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel, [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications) and [BroadcastChannel](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
+It uses [WebRTC](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel), [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications) and [BroadcastChannel](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
 
 ## Example usage
 
@@ -66,7 +66,9 @@ const r = new Remote();
 r.id; // `1234-45`
 ```
 
-Ids are needed to direct a message to a specific peer, or if you want to do some kind of logic to process messages differently depending on what peer sent it. Each incoming message is marked with `_from`:
+Ids are needed to direct a message to a specific peer (`r.send(msg, peerId)`), or if you want to do some kind of logic to process messages differently depending on what peer sent it. 
+
+Each incoming message is marked with the property `_from` which can be used for this purpose:
 
 ```js
 r.onData = (d) => {
@@ -78,7 +80,20 @@ r.onData = (d) => {
 }
 ```
 
-You can also assign an id at startup with the `id` parameter:
+If a message was direct to a peer, it will also have a `_to` property. This can likewise be used behave differently if we got a generic broadcast or something just for us:
+
+```js
+const ourId = r.id;
+r.onData = (d) => {
+  if (d._to === ourId) {
+    // Individual message
+  } else {
+    // Broadcast message
+  }
+}
+```
+
+You can assign an id at startup with the `peerId` parameter:
 
 ```js
 const r = new Remote({
@@ -97,11 +112,7 @@ To run it locally:
 1. Have Node.js installed. 
 2. Run `npm install` in the folder to install dependencies. 
 
-Once those steps are complete, it's just a matter of starting:
-
-```
-node server.js
-```
+Once those steps are complete, it's just a matter of starting: `node server.js`
 
 In all:
 
@@ -137,12 +148,12 @@ WebRTC connections are facilitated by the web socket connection. This allows pee
 
 When creating a new instance, options can be set to customise behaviour. All can be omitted by default.
 
-* websocket: string URL for websocket server
-* peerId: string Peer id
-* maintainLoopMs: number How often to do housekeeping in ms
-* allowNetwork: boolean If true, WebRTC & websockets will be attempted
-* debugMaintain:boolean If true, spits out logging everytime a housekeeping loop runs
-* defaultLog: silent|verbose|error: Default logging level
+* websocket (string) URL for websocket server
+* peerId (string) Peer id
+* maintainLoopMs (number) How often to do housekeeping in ms
+* allowNetwork (boolean) If true, WebRTC & websockets will be attempted
+* debugMaintain (boolean) If true, spits out logging everytime a housekeeping loop runs
+* defaultLog (string silent|verbose|error): Logging level ('error' by default)
 * log.ws / log.rtc / log.bc: Logging level for given sub-system
 
 ## Diagnostics
