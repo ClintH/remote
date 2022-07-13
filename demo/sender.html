@@ -66,12 +66,31 @@
       word-break: break-all;
     }
   </style>
-  <div id="activity"></div>
+
   <h1>sender demo</h1>
-  <label>
-    Name:
-    <input id="txtSourceName" />
-  </label>
+  <div>
+    <label>
+      Id:
+      <input id="txtPeerId" />
+    </label>
+  </div>
+  <div>
+    <h2>send</h2>
+    <div>
+      <label>
+        To:
+        <input id="txtTo" />
+      </label>
+    </div>
+    <div>
+      <label>
+        Data:
+        <input id="txtData" />
+      </label>
+    </div>
+    <button id="btnSend">Send</button>
+  </div>
+
   <h2>
     Last data
   </h2>
@@ -84,6 +103,7 @@
   <div id="log">
 
   </div>
+  <div id="remote-status"></div>
   <script type="module" src="sender.js"></script>
 
 </body>

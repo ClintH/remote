@@ -1,3 +1,10 @@
-import Remote from './Remote.js';
-import '../src/BroadcastChannel.js';
-export { Remote };
+import { Manager, Options } from './Manager.js';
+export declare class Remote {
+    _manager: Manager;
+    constructor(opts: Options);
+    get id(): string;
+    send(data: any, to?: string): void;
+    broadcast(data: any): void;
+    onData(msg: any): void;
+}
+export { Manager };

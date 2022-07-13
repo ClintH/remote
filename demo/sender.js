@@ -1,15 +1,28 @@
 import {Remote} from "../dist/index.mjs";
 
-// Create a Remote instance
 const r = new Remote({
-  // no options needed by default
-  // see README for examples  
+  websocket: `ws://127.0.0.1:8080/ws`,
+  allowNetwork: true
 });
 
-// Every 2 seconds send a timestamp
+document.getElementById(`txtPeerId`).value = r.id;
+
+
 setInterval(() => {
-  r.send({
+  r.broadcast({
+    what: `this is a broadcast`,
     timestamp: new Date().toLocaleString()
   });
-}, 2000);
+}, 10 * 1000);
 
+document.getElementById(`btnSend`).addEventListener(`click`, () => {
+  const toEl = document.getElementById(`txtTo`);
+  const dataEl = document.getElementById(`txtData`);
+
+  const toTxt = toEl.value ?? ``;
+  const dataTxt = dataEl.value ?? ``;
+
+  console.log(`Send! ${toTxt}`);
+
+  r.send(dataTxt, toTxt);
+});

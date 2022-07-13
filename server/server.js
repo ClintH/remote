@@ -3,7 +3,7 @@
 // ----
 // Config
 const port = process.env.PORT || 8080;
-const quiet = process.env.QUIET || true;
+const quiet = process.env.QUIET || false;
 // ---
 
 const express = require('express');

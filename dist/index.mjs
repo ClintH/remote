@@ -1,17 +1,959 @@
-class Event {
+class BroadcasterBase {
+    constructor(_name, _broadcast, _log) {
+        this._name = _name;
+        this._broadcast = _broadcast;
+        this._log = _log;
+        this._state = `idle`;
+    }
+    setState(newState) {
+        if (newState == this._state)
+            return;
+        const priorState = this._state;
+        this._state = newState;
+        this._log.verbose(priorState + ' -> ' + newState);
+        this._broadcast.onBroadcasterState(priorState, newState, this);
+    }
+    get state() {
+        return this._state;
+    }
+    get name() {
+        return this._name;
+    }
+}
+
+class Log {
+    constructor(_prefix, _level = `error`) {
+        this._prefix = _prefix;
+        this._level = _level;
+    }
+    static fromConfig(opts, category, prefix) {
+        let l = opts[category];
+        if (l === undefined) {
+            const log = opts.log;
+            if (log !== undefined)
+                l = log[category];
+        }
+        if (l === `silent` || l === `verbose` || `error`)
+            return new Log(prefix, l);
+        return new Log(prefix);
+    }
+    warn(msg) {
+        if (this._level !== `verbose`)
+            return;
+        console.warn(this._prefix, msg);
+    }
+    verbose(msg) {
+        if (this._level !== `verbose`)
+            return;
+        console.log(this._prefix, msg);
+    }
+    error(msg) {
+        if (this._level === `silent`)
+            return;
+        console.error(this._prefix, msg);
+    }
+}
+
+class BcBroadcast extends BroadcasterBase {
+    constructor(_broadcast) {
+        super(`bc`, _broadcast, Log.fromConfig(_broadcast._manager.opts, `bc`, `BcBroadcast`));
+        this._bc = new BroadcastChannel(`remote`);
+        this._bc.addEventListener(`message`, evt => {
+            try {
+                const msg = JSON.parse(evt.data);
+                this._log.verbose(msg);
+                this._broadcast.onMessage(msg, this);
+            }
+            catch (e) {
+                console.error(e);
+            }
+        });
+        setTimeout(() => {
+            this.setState(`open`);
+        }, 500);
+    }
+    static isSupported() {
+        return (`BroadcastChannel` in self);
+    }
+    toString() {
+        return `BcBroadcast`;
+    }
+    maintain() {
+    }
+    send(payload) {
+        if (typeof payload === `string`) {
+            payload = { data: payload };
+        }
+        this._broadcast.ensureId(payload);
+        payload._channel = `bc-bc`;
+        this._bc.postMessage(JSON.stringify(payload));
+        return true;
+    }
+}
+
+const shortUuid = () => {
+    const firstPart = (Math.random() * 46656) | 0;
+    const secondPart = (Math.random() * 46656) | 0;
+    return ("000" + firstPart.toString(36)).slice(-3) + ("000" + secondPart.toString(36)).slice(-3);
+};
+const elapsed = (from) => {
+    let e = Date.now() - from;
+    if (e < 1000)
+        return `${e}ms`;
+    e /= 1000;
+    if (e < 1000)
+        return `${e}s`;
+    e /= 60;
+    if (e < 60)
+        return `${e}mins`;
+    e /= 60;
+    return `${e}hrs`;
+};
+
+class Broadcast extends EventTarget {
+    constructor(_manager) {
+        super();
+        this._manager = _manager;
+        this._broadcast = [];
+        this._peerId = _manager.peerId;
+        this._seenIds = new Set();
+    }
+    dumpToConsole() {
+        console.group(`Broadcasters`);
+        console.log(`# seen msg ids: ${[...this._seenIds.values()].length}`);
+        for (const b of this._broadcast) {
+            console.log(b.name + ' (' + b.state + ')');
+        }
+        console.groupEnd();
+    }
+    onBroadcasterState(priorState, newState, source) {
+        this.dispatchEvent(new CustomEvent(`change`, {
+            detail: { priorState, newState, source }
+        }));
+    }
+    add(b) {
+        this._broadcast.push(b);
+    }
+    send(payload) {
+        this.ensureId(payload);
+        this._broadcast.forEach(b => b.send(payload));
+    }
+    ensureId(payload) {
+        if (payload._id === undefined) {
+            const id = shortUuid();
+            payload._id = id;
+            this._seenIds.add(id);
+        }
+        payload._from = this._peerId;
+    }
+    warn(msg) {
+        console.log(`Broadcast`, msg);
+    }
+    onSessionMessageReceived(data, via, session) {
+        if (typeof data === `string`)
+            throw new Error(`Expected object`);
+        const { _id, _kind, _from } = data;
+        if (_from !== undefined)
+            this._manager.peering.notifySeenPeer(_from, session);
+        if (_id === undefined) {
+            this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
+            return;
+        }
+        if (!this._seenIds.has(_id)) {
+            this._seenIds.add(_id);
+        }
+        this._manager.onMessageReceived(data, via);
+    }
+    onMessage(data, via) {
+        const { _id, _kind, _from } = data;
+        if (_from !== undefined) {
+            this._manager.peering.notifySeenPeer(_from, via);
+        }
+        if (_id === undefined) {
+            this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
+            return;
+        }
+        if (this._seenIds.has(_id)) {
+            return;
+        }
+        else {
+            this._seenIds.add(_id);
+        }
+        if (_kind === undefined) {
+            this._manager.onBroadcastReceived(data, via);
+            return;
+        }
+        switch (_kind) {
+            case `peering-ad`:
+                this._manager.peering.onAdvertReceived(data, via);
+                break;
+            case `peering-invite`:
+                this._manager.peering.onInviteReceived(data, via);
+                break;
+            case `peering-reply`:
+                this._manager.peering.onReply(data, via);
+                break;
+            default:
+                this.log(`Unknown message kind: ${_kind}`);
+        }
+    }
+    maintain() {
+        const bcs = [...this._broadcast];
+        bcs.forEach(b => b.maintain());
+        const seen = [...this._seenIds.values()];
+        this._seenIds = new Set(seen.slice(seen.length / 2));
+    }
+    log(msg) {
+        console.log(`BroadcastMessageHandler`, msg);
+    }
+}
+
+class LogicalNode {
+    constructor(_id, _peering) {
+        this._id = _id;
+        this._peering = _peering;
+        this._deadAfterIdleMs = 60 * 1000;
+        this._sessions = [];
+        this._state = `idle`;
+        this._idleSince = Date.now();
+        this._log = new Log(`LogicalNode[${_id}]`, _peering.manager.opts.defaultLog ?? `error`);
+    }
+    send(data) {
+        if (this.isDead)
+            throw new Error(`Cannot send while node is dead`);
+        for (const s of this._sessions) {
+            if (s.state === `open`) {
+                console.log(`Send via ${s.channel.name}`);
+                s.send(data);
+                return true;
+            }
+        }
+        return false;
+    }
+    setState(newState) {
+        if (newState == this._state)
+            return;
+        if (this.isDead)
+            throw new Error(`Node is marked dead, cannot change state`);
+        const priorState = this._state;
+        this._state = newState;
+        if (newState === `idle`)
+            this._idleSince = Date.now();
+        this._peering.onLogicalNodeState(priorState, newState, this);
+    }
+    hasChannel(channelName) {
+        return (this._sessions.some(c => (c.channel.name === channelName)));
+    }
+    onSessionEstablished(s) {
+        if (this.isDead)
+            throw new Error(`Node is marked dead, cannot establish session`);
+        this._sessions.push(s);
+        this._log.verbose(`Session established. ch: ${s.channel.name} id: ${s.id}. ${this._sessions.length} sesion(s)`);
+        this.setState(`open`);
+    }
+    dump() {
+        let t = [`LogicalNode[${this._id}]`];
+        this._sessions.forEach(s => {
+            t.push(` - ` + s.statusString());
+        });
+        return t.join('\n');
+    }
+    dumpSessions() {
+        let t = '';
+        this._sessions.forEach(s => {
+            t += ` - ` + s.state + ' ' + s.channel.name + ' elapsed: ' + s.elapsedString() + '\n';
+        });
+        return t.trim();
+    }
+    maintain() {
+        if (this.isDead)
+            return;
+        const sessions = [...this._sessions];
+        for (const s of sessions) {
+            s.maintain();
+        }
+        const length = this._sessions.length;
+        this._sessions = this._sessions.filter(s => s.state === `open`);
+        if (this._sessions.length !== length) {
+            this._log.verbose(`Removed ${length - this._sessions.length} session(s).`);
+        }
+        if (this.sessions.length === 0)
+            this.setState(`idle`);
+        if (this._state === `idle`) {
+            const elapsed = Date.now() - this._idleSince;
+            if (elapsed > this._deadAfterIdleMs)
+                this.setState(`dead`);
+        }
+    }
+    get id() {
+        return this._id;
+    }
+    get sessions() {
+        return [...this._sessions];
+    }
+    get isDead() {
+        return this._state === `dead`;
+    }
+    get state() {
+        return this._state;
+    }
+}
+
+class PeeringSession extends EventTarget {
+    constructor(id, weInitiated, remotePeer, channel, bc, manager) {
+        super();
+        this.id = id;
+        this.weInitiated = weInitiated;
+        this.remotePeer = remotePeer;
+        this.channel = channel;
+        this.bc = bc;
+        this.manager = manager;
+        this._state = `idle`;
+        this._createdAt = Date.now();
+    }
+    onMessageReceived(data, via) {
+        this.manager.broadcast.onSessionMessageReceived(data, via, this);
+    }
+    send(data) {
+        this.dispatchEvent(new CustomEvent(`send`, { detail: { ...data } }));
+        return true;
+    }
+    get name() {
+        return `peering-session`;
+    }
+    statusString() {
+        return `${this.state} ${this.channel.name} id: ${this.id} ${this.weInitiated ? `local` : `remote`} elapsed: ${elapsed(this._createdAt)}`;
+    }
+    elapsedString() {
+        return elapsed(this._createdAt);
+    }
+    setState(newState) {
+        if (this._state === newState)
+            return;
+        const priorState = this._state;
+        this._state = newState;
+        this.dispatchEvent(new CustomEvent(`change`, { detail: { priorState, newState } }));
+    }
+    maintain() {
+        if (this._state == `started` || this._state == `idle`) {
+            if (Date.now() - this._createdAt > 10 * 1000) {
+                this.setState(`timeout`);
+            }
+        }
+    }
+    get state() {
+        return this._state;
+    }
+    onClosed(reason) {
+        this.dispose();
+    }
+    onOpened() {
+        this.setState(`open`);
+        this.manager.peering.onSessionEstablished(this);
+    }
+    dispose() {
+        this.log(`dispose`);
+        this.setState(`closed`);
+        this.dispatchEvent(new Event(`disposing`));
+    }
+    static initiate(remotePeer, channel, bc, manager) {
+        const id = shortUuid();
+        return new PeeringSession(id, true, remotePeer, channel, bc, manager);
+    }
+    ;
+    static accept(sessionId, remotePeer, channel, bc, manager) {
+        return new PeeringSession(sessionId, false, remotePeer, channel, bc, manager);
+    }
+    start() {
+        if (this.state !== `idle`)
+            throw new Error(`Can only start while idle`);
+        this.channel.initiatePeering(this.remotePeer, this);
+    }
+    log(msg) {
+        console.log(`PeeringSession`, msg);
+    }
+    onReply(r, bc) {
+        this.dispatchEvent(new CustomEvent(`reply`, { detail: { reply: r, bc } }));
+    }
+    broadcastReply(kind, data) {
+        data = {
+            ...data,
+            _kind: kind
+        };
+        this.bc.send(data);
+    }
+}
+
+class ExpiringMultiMap {
+    constructor(expiryMs) {
+        this.expiryMs = expiryMs;
+        this._store = new Map();
+        setTimeout(() => {
+            this.maintain();
+        }, Math.min(expiryMs, 30 * 1000));
+    }
+    get lengthKeys() {
+        const keys = [...this._store.keys()];
+        return keys.length;
+    }
+    maintain() {
+        const entries = [...this._store.entries()];
+        const now = Date.now();
+        entries.forEach(([k, arr]) => {
+            arr = arr.filter(v => v.expiresAt > now);
+            if (arr.length == 0) {
+                this._store.delete(k);
+            }
+            else {
+                this._store.set(k, arr);
+            }
+        });
+    }
+    get(key) {
+        const a = this._store.get(key);
+        if (a === undefined)
+            return [];
+        return a.map(v => v.data);
+    }
+    *valuesForKey(key) {
+        const a = this._store.get(key);
+        if (a === undefined)
+            return;
+        for (let i = 0; i < a.length; i++) {
+            yield a[i];
+        }
+    }
+    *keys() {
+        yield* this._store.keys();
+    }
+    *entriesRaw() {
+        yield* this._store.entries();
+    }
+    *entries() {
+        for (const e of this._store.entries()) {
+            for (let i = 0; i < e[1].length; i++) {
+                yield [e[0], e[1][i].data];
+            }
+        }
+    }
+    dump() {
+        const now = Date.now();
+        const until = (v) => {
+            let e = v - now;
+            if (e < 1000)
+                return `${e}ms`;
+            e /= 1000;
+            if (e < 1000)
+                return `${Math.round(e)}s`;
+            e /= 60;
+            return `${Math.round(e)}mins`;
+        };
+        let t = ``;
+        for (const [k, v] of this._store.entries()) {
+            t += `${k} = `;
+            for (let i = 0; i < v.length; i++) {
+                t += v[i].data + ' (expires in ' + until(v[i].expiresAt) + ') ';
+            }
+        }
+        if (t.length === 0)
+            return `(empty)`;
+        else
+            return t;
+    }
+    add(key, value) {
+        let a = this._store.get(key);
+        if (a === undefined) {
+            a = [];
+            this._store.set(key, a);
+        }
+        const existing = a.find(v => v.data === value);
+        if (existing === undefined) {
+            a.push({ data: value, expiresAt: Date.now() + this.expiryMs });
+        }
+        else {
+            existing.expiresAt = Date.now() + this.expiryMs;
+        }
+    }
+}
+
+class Peering extends EventTarget {
+    constructor(manager) {
+        super();
+        this.manager = manager;
+        this._log = new Log(`Peering`, manager.opts.defaultLog ?? `silent`);
+        this._nodes = new Map();
+        this._inProgress = [];
+        this._ephemeral = new ExpiringMultiMap(30 * 1000);
+    }
+    getEphemeral(peerId) {
+        return this._ephemeral.get(peerId);
+    }
+    getLogicalNode(peerId) {
+        return this._nodes.get(peerId);
+    }
+    onLogicalNodeState(priorState, newState, node) {
+        this.dispatchEvent(new CustomEvent(`logicalNodeState`, {
+            detail: {
+                newState, priorState, node
+            }
+        }));
+    }
+    hasChannel(channelName) {
+        for (const n of this._nodes.values()) {
+            if (n.hasChannel(channelName))
+                return true;
+        }
+    }
+    dumpToConsole() {
+        console.group(`Peering`);
+        console.group(`LogicalNodes`);
+        for (const n of this._nodes.values()) {
+            let ln = n.id + ` (${n.state})\n`;
+            const sessions = n.sessions;
+            for (const s of sessions) {
+                ln += ' - ' + s.channel.name + ' (' + s.state + ') ' + s.id + '\n';
+            }
+            console.log(ln);
+        }
+        console.groupEnd();
+        if (this._inProgress.length > 0) {
+            console.group('In progress');
+            for (const s of this._inProgress) {
+                console.log(s.state + ' ' + s.channel.name + ' ' + s.id + ' ' + s.elapsedString());
+            }
+            console.groupEnd();
+        }
+        if (this._ephemeral.lengthKeys > 0) {
+            console.group('Ephemeral');
+            console.log(this._ephemeral.dump());
+            console.groupEnd();
+        }
+        console.groupEnd();
+    }
+    onSessionEstablished(s) {
+        const n = this.getOrCreate(s.remotePeer);
+        n.onSessionEstablished(s);
+        this._inProgress = this._inProgress.filter(p => p.id !== s.id);
+    }
+    maintain() {
+        const ip = [...this._inProgress];
+        ip.forEach(i => {
+            i.maintain();
+        });
+        this._inProgress = this._inProgress.filter(i => i.state === `idle` ||
+            i.state == `open` ||
+            i.state === `started`);
+        const nodes = [...this._nodes.values()];
+        nodes.forEach(n => {
+            n.maintain();
+            if (this.manager._debugMaintain)
+                console.log(n.dump());
+        });
+        const dead = nodes.filter(n => n.isDead);
+        for (const d of dead) {
+            this._log.verbose(`Removing dead node: ${d.id}`);
+            this.dispatchEvent(new CustomEvent(`logicalNodeRemoved`, {
+                detail: {
+                    node: d,
+                    type: `removed`
+                }
+            }));
+            this._nodes.delete(d.id);
+        }
+        if (this.manager._debugMaintain)
+            console.log(this._ephemeral.dump());
+    }
+    getOrCreate(id) {
+        let n = this._nodes.get(id);
+        if (n === undefined) {
+            n = new LogicalNode(id, this);
+            this._nodes.set(id, n);
+            this.dispatchEvent(new CustomEvent(`logicalNodeAdded`, {
+                detail: {
+                    node: n,
+                    type: `added`
+                }
+            }));
+        }
+        return n;
+    }
+    findPeeringSession(peerId, channel) {
+        return this._inProgress.find(p => p.remotePeer === peerId && p.channel === channel);
+    }
+    findPeeringSessionById(session) {
+        return this._inProgress.find(p => p.id === session);
+    }
+    findPeeringSessionByRemote(remote) {
+        return this._inProgress.find(p => p.remotePeer === remote);
+    }
+    onInviteReceived(i, bc) {
+        try {
+            const invitee = i.invitee;
+            if (invitee !== this.manager.peerId)
+                return;
+            if (this.findPeeringSessionByRemote(i.inviter)) {
+                this.warn(`Dropping invitation from a peer we have already invited: ${i.inviter}. Our id: ${this.manager.peerId}`);
+                return;
+            }
+            this.onAllowInvite(i, bc);
+        }
+        catch (ex) {
+            this.warn(ex);
+        }
+    }
+    onReply(r, bc) {
+        const s = this.findPeeringSessionById(r.peeringSessionId);
+        if (s === undefined) {
+            this._log.warn(`Received peering reply for unknown session  ${r.peeringSessionId}`);
+            this._log.warn(r);
+            this._log.warn(`Sessions: ` + this._inProgress.map(p => p.id).join(', '));
+            return;
+        }
+        s.onReply(r, bc);
+    }
+    onAllowInvite(i, bc) {
+        JSON.parse(i.payload);
+        const ch = this.manager.getChannelFactory(i.channel);
+        if (ch === undefined) {
+            this.warn(`Received invitation for channel ${i.channel}, but we do not support it`);
+            return;
+        }
+        const s = PeeringSession.accept(i.peeringSessionId, i.inviter, ch, bc, this.manager);
+        this._inProgress.push(s);
+        ch.acceptInvitation(i, s, bc);
+    }
+    warn(msg) {
+        console.warn(`PeeringHandler`, msg);
+    }
+    notifySeenPeer(peer, bc) {
+        this._ephemeral.add(peer, bc);
+    }
+    onAdvertReceived(pa, bc) {
+        const n = this.getOrCreate(pa.peerId);
+        const channels = pa.channels.split(', ');
+        this.notifySeenPeer(pa.peerId, bc);
+        channels.forEach(c => {
+            if (c.length === 0 || c === undefined)
+                return;
+            const ch = this.manager.getChannelFactory(c);
+            if (ch === undefined) {
+                return;
+            }
+            if (!n.hasChannel(c)) {
+                const inProgress = this.findPeeringSession(pa.peerId, ch);
+                if (inProgress) ;
+                else {
+                    const start = PeeringSession.initiate(pa.peerId, ch, bc, this.manager);
+                    this._inProgress.push(start);
+                    start.start();
+                }
+            }
+        });
+    }
+    getLogicalNodes() {
+        return [...this._nodes.values()];
+    }
+}
+
+class RtcPeeringSession {
+    constructor(session) {
+        this.session = session;
+        this._pc = new RTCPeerConnection({
+            iceServers: [
+                { urls: ['stun:stun.services.mozilla.com'] },
+                { urls: ['stun:stun.l.google.com:19302'] }
+            ]
+        });
+        this._log = Log.fromConfig(session.manager.opts, `rtc`, `RtcPeeringSession`);
+        this._onDisposingH = this.onDisposing.bind(this);
+        this._onReplyH = this.onReply.bind(this);
+        this._onSendH = this.onSend.bind(this);
+        session.addEventListener(`reply`, this._onReplyH);
+        session.addEventListener(`disposing`, this._onDisposingH);
+        session.addEventListener(`send`, this._onSendH);
+    }
+    onSend(evt) {
+        const data = evt.detail;
+        if (this._dc) {
+            console.log(`RTC Sending`, data);
+            this._dc.send(JSON.stringify(data));
+        }
+        else {
+            this.warn(`Cannot send without data channel`);
+        }
+    }
+    onDisposing() {
+        this._log.verbose(`onDisposing`);
+        this.session.removeEventListener(`reply`, this._onReplyH);
+        this.session.removeEventListener(`disposing`, this._onDisposingH);
+    }
+    onReply(evt) {
+        const { reply, bc } = evt.detail;
+        const subKind = reply.sub;
+        switch (subKind) {
+            case `rtc-accept`:
+                try {
+                    const descr = JSON.parse(reply.payload);
+                    this._pc.setRemoteDescription(descr);
+                }
+                catch (ex) {
+                    this.warn(ex);
+                }
+                break;
+            case `rtc-ice`:
+                try {
+                    const c = new RTCIceCandidate({
+                        sdpMLineIndex: reply.label,
+                        candidate: reply.candidate
+                    });
+                    this._pc.addIceCandidate(c);
+                }
+                catch (ex) {
+                    this.warn(ex);
+                    this.warn(reply);
+                }
+                break;
+            default:
+                this._log.verbose(`Cannot handle reply ${subKind}`);
+        }
+    }
+    warn(msg) {
+        console.warn(`RtcPeeringSession`, msg);
+    }
+    async start() {
+        const p = this._pc;
+        const dc = this._pc.createDataChannel(`${this.session.remotePeer}`);
+        this.setupDataChannel(dc);
+        p.addEventListener(`icecandidate`, evt => {
+            const c = evt.candidate;
+            if (c === null)
+                return;
+            this.session.broadcastReply(`peering-reply`, {
+                sub: `rtc-ice`,
+                peeringSessionId: this.session.id,
+                label: c.sdpMLineIndex,
+                id: c.sdpMid,
+                candidate: c.candidate
+            });
+        });
+        p.addEventListener(`close`, evt => {
+            this._log.verbose(`channel close`);
+        });
+        p.addEventListener(`error`, evt => {
+            this._log.verbose(`channel error`);
+        });
+        p.addEventListener(`open`, evt => {
+            this._log.verbose(`channel open`);
+        });
+        p.addEventListener(`message`, evt => {
+            this._log.verbose(`channel message: ${JSON.stringify(evt)}`);
+        });
+        this._pc = p;
+        const o = await p.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+        await p.setLocalDescription(o);
+        const invite = {
+            invitee: this.session.remotePeer,
+            inviter: this.session.manager.peerId,
+            channel: `rtc`,
+            peeringSessionId: this.session.id,
+            payload: JSON.stringify(o)
+        };
+        this.session.broadcastReply(`peering-invite`, invite);
+    }
+    setupDataChannel(dc) {
+        this._dc = dc;
+        dc.addEventListener(`close`, evt => {
+            this._log.verbose(`dc close`);
+            this.session.onClosed(`data channel closed`);
+        });
+        dc.addEventListener(`closing`, evt => {
+            this._log.verbose(`dc closing`);
+        });
+        dc.addEventListener(`error`, evt => {
+            this._log.verbose(`dc error`);
+        });
+        dc.addEventListener(`message`, evt => {
+            try {
+                const o = JSON.parse(evt.data);
+                this.session.onMessageReceived(o, this);
+            }
+            catch (e) {
+                this._log.warn(`Could not parse: ${evt.data}`);
+            }
+        });
+        dc.addEventListener(`open`, evt => {
+            this._log.verbose(`dc open`);
+            this.session.onOpened();
+        });
+    }
+    acceptInvitation(i) {
+        this._log.verbose(`Accept invitation from ${i.inviter}`);
+        try {
+            const payload = JSON.parse(i.payload);
+            const p = this._pc;
+            p.addEventListener(`datachannel`, evt => {
+                this._log.verbose(`Data channel created!`);
+                this.setupDataChannel(evt.channel);
+            });
+            p.setRemoteDescription(payload);
+            p.createAnswer().then(descr => {
+                p.setLocalDescription(descr);
+                this.session.broadcastReply(`peering-reply`, {
+                    invitee: i.invitee,
+                    sub: `rtc-accept`,
+                    peeringSessionId: this.session.id,
+                    inviter: i.inviter,
+                    payload: JSON.stringify(descr)
+                });
+            });
+        }
+        catch (ex) {
+            console.warn(ex);
+        }
+    }
+}
+class RtcChannelFactory {
+    constructor() {
+    }
+    get name() {
+        return `rtc`;
+    }
+    maintain() {
+    }
+    acceptInvitation(i, session, bc) {
+        const s = new RtcPeeringSession(session);
+        s.acceptInvitation(i);
+    }
+    initiatePeering(remoteId, session) {
+        const s = new RtcPeeringSession(session);
+        s.start();
+    }
+}
+
+class StatusDisplay {
+    constructor(manager, opts = {}) {
+        this.manager = manager;
+        const defaultOpacity = opts.defaultOpacity ?? 0.1;
+        const updateRateMs = opts.updateRateMs ?? 5000;
+        this.hue = opts.hue ?? 90;
+        const e = this._el = document.getElementById(`remote-status`);
+        if (e === null)
+            return;
+        const styleIndicators = (el) => {
+            el.style.display = `flex`;
+            el.style.alignItems = `center`;
+        };
+        const bcIndicators = document.createElement(`DIV`);
+        bcIndicators.append(this.createIndicator(`ws`, `WebSockets`), this.createIndicator(`bc`, `BroadcastChannel`));
+        styleIndicators(bcIndicators);
+        e.append(bcIndicators);
+        const nodeIndicators = document.createElement(`DIV`);
+        styleIndicators(nodeIndicators);
+        e.append(nodeIndicators);
+        e.style.background = `hsla(${this.hue}, 20%, 50%, 50%)`;
+        e.style.color = `hsl(${this.hue}, 50%, 10%)`;
+        e.style.border = `1px solid hsla(${this.hue}, 20%, 10%, 50%)`;
+        e.style.fontSize = `0.7em`;
+        e.style.position = `fixed`;
+        e.style.bottom = `0`;
+        e.style.right = `0`;
+        e.style.padding = `0.3em`;
+        e.style.opacity = defaultOpacity.toString();
+        e.addEventListener(`pointerover`, () => {
+            e.style.opacity = `1.0`;
+        });
+        e.addEventListener(`pointerout`, () => {
+            e.style.opacity = defaultOpacity.toString();
+        });
+        e.addEventListener(`click`, () => {
+            manager.dump();
+        });
+        manager.broadcast.addEventListener(`change`, evt => {
+            const { priorState, newState, source } = evt.detail;
+            this.setIndicator(bcIndicators, source.name, newState === `open`, newState);
+        });
+        manager.peering.addEventListener(`logicalNodeState`, evt => {
+            const { priorState, newState, node } = evt.detail;
+            this.setIndicator(nodeIndicators, node.id, node.state === `open`, node.dumpSessions());
+        });
+        manager.peering.addEventListener(`logicalNodeAdded`, evt => {
+            const { type, node } = evt.detail;
+            nodeIndicators.append(this.createIndicator(node.id, `Node`));
+        });
+        manager.peering.addEventListener(`logicalNodeRemoved`, evt => {
+            const { type, node } = evt.detail;
+            const i = this.getIndicator(nodeIndicators, node.id);
+            if (i !== null)
+                i.remove();
+        });
+        setInterval(() => {
+            const nodes = this.manager.peering.getLogicalNodes();
+            const seen = new Set();
+            for (const n of nodes) {
+                seen.add(n.id);
+                let sessions = n.dumpSessions();
+                const eph = this.manager.peering.getEphemeral(n.id);
+                for (const e of eph) {
+                    sessions += '\nSeen on: ' + e.name + ' (' + e.state + ')';
+                }
+                this.setIndicator(nodeIndicators, n.id, n.state === `open`, sessions);
+            }
+            const indicators = this.getIndicators(nodeIndicators);
+            for (const i of indicators) {
+                if (!seen.has(i.getAttribute(`data-for`))) {
+                    i.remove();
+                }
+            }
+        }, updateRateMs);
+    }
+    getIndicators(parent) {
+        return Array.from(parent.querySelectorAll(`.remote-indicator`));
+    }
+    getIndicator(parent, label) {
+        return parent.querySelector(`[data-for="${label}"]`);
+    }
+    setIndicator(parent, label, state, titleAddition = ``) {
+        let el = this.getIndicator(parent, label);
+        if (el === null) {
+            el = this.createIndicator(label, titleAddition);
+            parent.append(el);
+            return;
+        }
+        const title = el.getAttribute(`data-title`) + ` ` + titleAddition;
+        el.title = title;
+        if (state) {
+            el.style.border = `1px solid hsla(${this.hue}, 30%, 10%, 50%)`;
+        }
+        else {
+            el.style.border = ``;
+        }
+    }
+    createIndicator(label, title = ``) {
+        const ind = document.createElement(`div`);
+        ind.innerText = label;
+        ind.title = title;
+        ind.classList.add(`remote-indicator`);
+        ind.setAttribute(`data-for`, label);
+        ind.style.padding = `0.3em`;
+        ind.setAttribute(`data-title`, title);
+        return ind;
+    }
+}
+
+class Event$1 {
     constructor(type, target) {
         this.target = target;
         this.type = type;
     }
 }
-class ErrorEvent extends Event {
+class ErrorEvent extends Event$1 {
     constructor(error, target) {
         super('error', target);
         this.message = error.message;
         this.error = error;
     }
 }
-class CloseEvent extends Event {
+class CloseEvent extends Event$1 {
     constructor(code = 1000, reason = '', target) {
         super('close', target);
         this.wasClean = true;
@@ -366,444 +1308,178 @@ class ReconnectingWebSocket {
     }
 }
 
-class SlidingWindow {
-    constructor(size = 5) {
-        this.data = [];
-        this.index = 0;
-        this.size = size;
-        for (let i = 0; i < size; i++) {
-            this.data[i] = NaN;
-        }
+class WebsocketBroadcast extends BroadcasterBase {
+    constructor(broadcast, serverUrl) {
+        super(`ws`, broadcast, Log.fromConfig(broadcast._manager.opts, `ws`, `WebsocketBroadcast`));
+        const url = serverUrl ?? (location.protocol === 'http:' ? 'ws://' : 'wss://') + location.host + '/ws';
+        this._ws = new ReconnectingWebSocket(url);
+        let alrightSeenErrorThankYou = false;
+        this._ws.addEventListener(`close`, evt => {
+            this._log.verbose(`close`);
+            this.setState(`closed`);
+        });
+        this._ws.addEventListener(`error`, evt => {
+            if (evt.message === `TIMEOUT` || alrightSeenErrorThankYou)
+                return;
+            this._log.warn(`error: ${evt}`);
+            alrightSeenErrorThankYou = true;
+            this.setState(`error`);
+        });
+        this._ws.addEventListener(`message`, evt => {
+            try {
+                const m = JSON.parse(evt.data);
+                this._broadcast.onMessage(m, this);
+            }
+            catch (e) {
+                this._log.warn(e);
+            }
+        });
+        this._ws.addEventListener(`open`, evt => {
+            alrightSeenErrorThankYou = false;
+            this.setState(`open`);
+            this._log.verbose(`Connected to ${url}`);
+        });
     }
-    push(v) {
-        let idx = this.index;
-        this.data[idx++] = v;
-        if (idx == this.size)
-            idx = 0;
-        this.index = idx;
+    toString() {
+        return `WebsocketBroadcast`;
     }
-    average() {
-        let total = 0;
-        let samples = 0;
-        for (let i = 0; i < this.size; i++) {
-            if (isNaN(this.data[i]))
-                continue;
-            total += this.data[i];
-            samples++;
-        }
-        return total / samples;
+    maintain() {
     }
-    max() {
-        let max = Number.MIN_SAFE_INTEGER;
-        for (let i = 0; i < this.size; i++) {
-            if (isNaN(this.data[i]))
-                continue;
-            max = Math.max(this.data[i], max);
+    send(payload) {
+        if (typeof payload === `string`) {
+            payload = { data: payload };
         }
-        return max;
-    }
-    min() {
-        let min = Number.MAX_SAFE_INTEGER;
-        for (let i = 0; i < this.size; i++) {
-            if (isNaN(this.data[i]))
-                continue;
-            min = Math.min(this.data[i], min);
-        }
-        return min;
+        this._broadcast.ensureId(payload);
+        payload._channel = `ws-bc`;
+        this._ws.send(JSON.stringify(payload));
+        return true;
     }
 }
 
-class Intervals {
-    constructor(size = 5) {
-        this.last = 0;
-        this.avg = new SlidingWindow(size);
-    }
-    ping() {
-        if (this.last == 0) {
-            this.last = Date.now();
-            return;
+class Manager extends EventTarget {
+    constructor(opts = {}) {
+        super();
+        this.opts = opts;
+        this.peerId = opts.peerId ?? new Date().getMilliseconds() + `-` + Math.floor(Math.random() * 100);
+        this._allowNetwork = opts.allowNetwork ?? false;
+        this._debugMaintain = opts.debugMaintain ?? false;
+        this._defaultLog = opts.defaultLog ?? `error`;
+        if (!opts.log)
+            opts.log = {};
+        if (!opts.log.rtc)
+            opts.log.rtc = this._defaultLog;
+        if (!opts.log.bc)
+            opts.log.bc = this._defaultLog;
+        this.log(`Id: ${this.peerId}. network allowed: ${this._allowNetwork}`);
+        this.peering = new Peering(this);
+        this.broadcast = new Broadcast(this);
+        this._channelFactories = [];
+        this._statusDisplay = new StatusDisplay(this);
+        if (this._allowNetwork) {
+            this.broadcast.add(new WebsocketBroadcast(this.broadcast, opts.websocket));
+            this.addChannelFactory(new RtcChannelFactory());
         }
-        let elapsed = Date.now() - this.last;
-        this.last = Date.now();
-        this.avg.push(elapsed);
+        if (BcBroadcast.isSupported()) {
+            this.broadcast.add(new BcBroadcast(this.broadcast));
+        }
+        else {
+            this.log(`BroadcastChannel not supported by this browser`);
+        }
+        const loopMs = opts.maintainLoopMs ?? 60 * 1000 + (20 * 1000 * Math.random());
+        setInterval(() => {
+            this.maintain();
+        }, loopMs);
+        setTimeout(() => {
+            this.advertise();
+        }, 5000 * Math.random());
     }
-    averageSeconds() {
-        let avg = this.avg.average();
-        if (isNaN(avg))
-            return avg;
-        avg /= 1000;
-        return avg;
+    getChannelFactory(name) {
+        return this._channelFactories.find(c => c.name === name);
     }
-    average() {
-        return this.avg.average();
+    addChannelFactory(c) {
+        this._channelFactories.push(c);
+    }
+    onBroadcastReceived(data, via) {
+        this.dispatchEvent(new CustomEvent(`message`, {
+            detail: data
+        }));
+    }
+    onMessageReceived(data, via) {
+        this.dispatchEvent(new CustomEvent(`message`, {
+            detail: data
+        }));
+    }
+    send(data, to) {
+        if (typeof data === `string`)
+            data = { msg: data };
+        this.broadcast.ensureId(data);
+        if (to !== undefined && to.length > 0) {
+            data._to = to;
+            const n = this.peering.getLogicalNode(to);
+            if (n !== undefined) {
+                if (n.send(data)) {
+                    return;
+                }
+            }
+            const channels = this.peering.getEphemeral(to);
+            for (const ch of channels) {
+                if (ch.send(data)) {
+                    console.log(`Sent on channel ${ch.name}`);
+                    return;
+                }
+            }
+        }
+        console.log(`Broadcast fallback`);
+        this.broadcast.send(data);
+    }
+    advertise() {
+        let f = this._channelFactories.map(f => f.name);
+        const ad = {
+            _kind: `peering-ad`,
+            peerId: this.peerId,
+            channels: f.join(', ')
+        };
+        this.broadcast.send({ ...ad });
+    }
+    maintain() {
+        this.peering.maintain();
+        this.broadcast.maintain();
+        const cf = [...this._channelFactories];
+        cf.forEach(c => c.maintain());
+        this.advertise();
+    }
+    dump() {
+        console.group(`remote`);
+        this.peering.dumpToConsole();
+        this.broadcast.dumpToConsole();
+        console.groupEnd();
+    }
+    log(msg) {
+        console.log(`Remote`, msg);
     }
 }
 
 class Remote {
-    constructor(opts = { disableRemote: false }) {
-        this.bc = null;
-        this.connected = false;
-        this.useSockets = false;
-        this.useBroadcastChannel = false;
-        this.matchIds = false;
-        this.consoleRedirected = false;
-        this.receiveSerials = new Map();
-        this.serial = 0;
-        this.lastDataEl = null;
-        this.logEl = null;
-        this.activityEl = null;
-        this.lastSend = 0;
-        this.logLimit = 150;
-        this.sendInterval = new Intervals(5);
-        this.receiveInterval = new Intervals(5);
-        if (!opts.minMessageIntervalMs)
-            opts.minMessageIntervalMs = 15;
-        if (!opts.serialise)
-            opts.serialise = true;
-        if (opts.matchIds)
-            this.matchIds = true;
-        this.disableRemote = opts.disableRemote;
-        this.serialise = opts.serialise;
-        if (opts.useSockets === undefined)
-            this.useSockets = location.host.endsWith('glitch.me') || false;
-        else
-            this.useSockets = opts.useSockets;
-        if (opts.useBroadcastChannel === undefined) {
-            if (opts.useSockets)
-                this.useBroadcastChannel = false;
-            else
-                this.useBroadcastChannel = true;
-        }
-        else {
-            this.useBroadcastChannel = opts.useBroadcastChannel;
-        }
-        this.ourId = opts.ourId;
-        this.lastSend = 0;
-        this.url = opts.url;
-        this.minMessageIntervalMs = opts.minMessageIntervalMs;
-        this.init();
-        if (this.useSockets)
-            this.initSockets();
-        if (this.useBroadcastChannel)
-            this.initBroadcastChannel();
+    constructor(opts) {
+        this._manager = new Manager(opts);
+        this._manager.addEventListener(`message`, evt => {
+            const d = evt.detail;
+            delete d._id;
+            delete d._channel;
+            this.onData(d);
+        });
     }
-    send(data) {
-        const interval = Date.now() - this.lastSend;
-        if (interval < this.minMessageIntervalMs)
-            return;
-        const d = {
-            from: this.ourId,
-            ...data
-        };
-        if (this.serialise)
-            d.serial = this.serial++;
-        let str = JSON.stringify(d);
-        if (this.socket && this.useSockets && this.socket.isReady())
-            this.socket.send(str);
-        if (this.useBroadcastChannel && this.bc) {
-            this.bc.postMessage(str);
-        }
-        if (this.lastDataEl && !this.disableRemote) {
-            if (str.length > 500)
-                str = str.substring(0, 500) + '...';
-            this.lastDataEl.innerText = str;
-        }
-        this.lastSend = Date.now();
-        this.sendInterval.ping();
-        if (this.serial > 1000)
-            this.serial = 0;
+    get id() {
+        return this._manager.peerId;
     }
-    seenMessage(o) {
-        if (!this.serialise)
-            return false;
-        if (!o.serial)
-            return;
-        if (!o.from)
-            return;
-        const lastSerial = this.receiveSerials.get(o.from);
-        if (lastSerial) {
-            if (lastSerial === o.serial) {
-                return true;
-            }
-            if (lastSerial > o.serial) {
-                if (o.serial < 10) ;
-                else
-                    return true;
-            }
-        }
-        this.receiveSerials.set(o.from, o.serial);
-        return false;
+    send(data, to) {
+        this._manager.send(data, to);
     }
-    initBroadcastChannel() {
-        try {
-            const bc = new BroadcastChannel('remote');
-            bc.onmessage = (evt) => {
-                this.receiveInterval.ping();
-                try {
-                    const o = JSON.parse(evt.data);
-                    o.source = 'bc';
-                    if (this.matchIds && o.from !== this.ourId)
-                        return;
-                    if (!this.seenMessage(o))
-                        this.onData(o);
-                }
-                catch (err) {
-                    this.error(err);
-                    this.log('Data: ' + JSON.stringify(evt.data));
-                }
-            };
-            this.bc = bc;
-            console.log('Broadcast channel created');
-        }
-        catch (ex) {
-            console.error(ex);
-        }
+    broadcast(data) {
+        this._manager.broadcast.send(data);
     }
-    init() {
-        this.logEl = document.getElementById('log');
-        this.lastDataEl = document.getElementById('lastData');
-        const hasLogEl = document.getElementById('log') !== null;
-        if (!this.disableRemote && hasLogEl) {
-            this.consoleRedirected = true;
-            console.log2 = console.log;
-            console.error2 = console.error;
-            console.log = this.log.bind(this);
-            console.error = this.error.bind(this);
-            window.onerror = (message, source, lineno, colno, error) => this.error(message, error);
-            document.getElementById('logTitle')?.addEventListener('click', () => this.clearLog());
-        }
-        if (this.ourId === undefined) {
-            try {
-                let id = window.localStorage.getItem('id');
-                if (id)
-                    this.setId(id);
-            }
-            catch (e) { }
-        }
-        if (this.ourId === undefined) {
-            this.setId(Date.now().toString(36) + Math.random().toString(36).substr(2));
-            if (this.ourId) {
-                try {
-                    window.localStorage.setItem('id', this.ourId);
-                }
-                catch (e) { }
-            }
-        }
-        const txtSourceName = document.getElementById('txtSourceName');
-        if (txtSourceName) {
-            if (this.ourId)
-                txtSourceName.value = this.ourId;
-            txtSourceName.addEventListener('change', () => {
-                const id = txtSourceName.value.trim();
-                if (id.length == 0)
-                    return;
-                this.setId(id);
-            });
-        }
-        const activityEl = document.getElementById('activity');
-        if (activityEl) {
-            this.activityEl = activityEl;
-            this.updateActivityLoop();
-        }
-    }
-    updateActivityLoop() {
-        this.updateActivity();
-        setTimeout(() => this.updateActivityLoop(), 500);
-    }
-    updateActivity() {
-        if (!this.activityEl)
-            return;
-        let ws = '';
-        if (this.connected) {
-            ws = `<div style="background-color: green" title="WebSocket connected">WS</div>`;
-        }
-        else if (this.useSockets) {
-            ws = `<div style="background-color: red" title="WebSocket not connected">WS</div>`;
-        }
-        else {
-            ws = `<div style="background-color: gray" title="WebSocket disabled">WS</div>`;
-        }
-        let bc = '';
-        if (this.bc) {
-            bc = `<div style="background-color: green" title="BroadcastChannel enabled">BC</div>`;
-        }
-        else if (this.useBroadcastChannel) {
-            bc = `<div style="background-color: red" title="BroadcastChannel not connected">BC</div>`;
-        }
-        else {
-            bc = `<div style="background-color: gray" title="BroadcastChannel disabled">BC</div>`;
-        }
-        const elapsedReceiveMs = this.receiveInterval.average();
-        const elapsedReceiveHtml = isNaN(elapsedReceiveMs) ? '' : `<div title="Average receive interval in ms">R: ${Math.floor(elapsedReceiveMs)}</div>`;
-        const elapsedSendMs = this.sendInterval.average();
-        const elapsedSendHtml = isNaN(elapsedSendMs) ? '' : `<div title="Average send interval in ms">S: ${Math.floor(elapsedSendMs)}</div>`;
-        this.activityEl.innerHTML = ws + bc + elapsedReceiveHtml + elapsedSendHtml;
-    }
-    setId(id) {
-        this.ourId = id;
-        this.serial = 0;
-        this.log(`Source name changed to: ${id}`);
-    }
-    initSockets() {
-        if (!this.url)
-            this.url = (location.protocol === 'http:' ? 'ws://' : 'wss://') + location.host + '/ws';
-        const s = new ReconnectingWebSocket(this.url);
-        const setConnected = (isConnected) => {
-            this.connected = isConnected;
-            if (isConnected) {
-                this.log('Web sockets connected to: ' + this.url);
-            }
-            else
-                this.log('Disconnected 😒');
-        };
-        s.onopen = (e) => {
-            setConnected(true);
-        };
-        s.onclose = (e) => {
-            setConnected(false);
-        };
-        s.onerror = (e) => {
-            setConnected(false);
-        };
-        s.onmessage = (evt) => {
-            this.receiveInterval.ping();
-            if (evt.data === 'connected')
-                return;
-            try {
-                const o = JSON.parse(evt.data);
-                o.source = 'ws';
-                if (this.matchIds && o.from !== this.ourId)
-                    return;
-                if (!this.seenMessage(o))
-                    this.onData(o);
-            }
-            catch (err) {
-                this.error(err);
-                this.log('Ws Data: ' + JSON.stringify(evt.data));
-            }
-        };
-        this.socket = s;
-    }
-    onData(d) {
-    }
-    getId() {
-        return this.ourId;
-    }
-    clearLog() {
-        if (this.logEl)
-            this.logEl.innerHTML = '';
-    }
-    truncate() {
-        if (this.logEl && this.logLimit > 0) {
-            if (this.logEl.children.length > this.logLimit) {
-                this.logEl.removeChild(this.logEl.lastChild);
-            }
-        }
-    }
-    log(msg) {
-        if (msg === undefined)
-            msg = '(undefined)';
-        if (typeof msg === 'object')
-            msg = JSON.stringify(msg);
-        if (this.consoleRedirected && console.log2)
-            console.log2(msg);
-        else
-            console.log(msg);
-        const html = `<div>${msg}</div>`;
-        this.logEl?.insertAdjacentHTML('afterbegin', html);
-        this.truncate();
-    }
-    error(msg, exception) {
-        if (msg === undefined)
-            msg = '(undefined)';
-        if (this.consoleRedirected && console.error2)
-            console.error2(msg);
-        else
-            console.error(msg);
-        let html = `<div class="error">${msg}</div>`;
-        if (exception?.stack)
-            html += `<div class="error">${exception.stack}</div>`;
-        this.logEl?.insertAdjacentHTML('afterbegin', html);
-        this.truncate();
+    onData(msg) {
     }
 }
 
-(function (global) {
-  var channels = [];
-
-  function BroadcastChannel(channel) {
-    var $this = this;
-    channel = String(channel);
-
-    var id = '$BroadcastChannel$' + channel + '$';
-
-    channels[id] = channels[id] || [];
-    channels[id].push(this);
-
-    this._name = channel;
-    this._id = id;
-    this._closed = false;
-    this._mc = new MessageChannel();
-    this._mc.port1.start();
-    this._mc.port2.start();
-
-    global.addEventListener('storage', function (e) {
-      if (e.storageArea !== global.localStorage) return;
-      if (e.newValue === null) return;
-      if (e.key.substring(0, id.length) !== id) return;
-      var data = JSON.parse(e.newValue);
-      $this._mc.port2.postMessage(data);
-    });
-  }
-
-  BroadcastChannel.prototype = {
-    // BroadcastChannel API
-    get name() {return this._name;},
-    postMessage: function (message) {
-      var $this = this;
-      if (this._closed) {
-        var e = new Error();
-        e.name = 'InvalidStateError';
-        throw e;
-      }
-      var value = JSON.stringify(message);
-
-      // Broadcast to other contexts via storage events...
-      var key = this._id + String(Date.now()) + '$' + String(Math.random());
-      global.localStorage.setItem(key, value);
-      setTimeout(function () {global.localStorage.removeItem(key);}, 500);
-
-      // Broadcast to current context via ports
-      channels[this._id].forEach(function (bc) {
-        if (bc === $this) return;
-        bc._mc.port2.postMessage(JSON.parse(value));
-      });
-    },
-    close: function () {
-      if (this._closed) return;
-      this._closed = true;
-      this._mc.port1.close();
-      this._mc.port2.close();
-
-      var index = channels[this._id].indexOf(this);
-      channels[this._id].splice(index, 1);
-    },
-
-    // EventTarget API
-    get onmessage() {return this._mc.port1.onmessage;},
-    set onmessage(value) {this._mc.port1.onmessage = value;},
-    addEventListener: function (type, listener /*, useCapture*/) {
-      return this._mc.port1.addEventListener.apply(this._mc.port1, arguments);
-    },
-    removeEventListener: function (type, listener /*, useCapture*/) {
-      return this._mc.port1.removeEventListener.apply(this._mc.port1, arguments);
-    },
-    dispatchEvent: function (event) {
-      return this._mc.port1.dispatchEvent.apply(this._mc.port1, arguments);
-    }
-  };
-
-  global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
-}(self));
-
-export { Remote };
+export { Manager, Remote };

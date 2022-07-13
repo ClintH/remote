@@ -4,7 +4,7 @@
  * https://github.com/pladaria/reconnecting-websocket
  * License MIT
  */
-import * as Events from './Events.js';
+import * as Events from './util/Events.js';
 const getGlobalWebSocket = () => {
     if (typeof WebSocket !== 'undefined') {
         return WebSocket;

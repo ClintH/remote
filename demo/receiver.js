@@ -1,12 +1,20 @@
 import {Remote} from "../dist/index.mjs";
 
-// Create a Remote instance
+const logEl = document.getElementById(`log`);
 const r = new Remote({
-  // no options needed by default
-  // see README for examples  
+  websocket: `ws://127.0.0.1:8080/ws`,
+  allowNetwork: true,
+  defaultLog: `verbose`
 });
 
-// When data is received, log it.
-r.onData = (d) => {
-  console.log(d);
+document.getElementById(`txtPeerId`).value = r.id;
+
+r.onData = (msg) => {
+  // Print to console and screen
+  log(msg);
+};
+
+const log = (msg) => {
+  console.log(msg);
+  logEl.insertAdjacentHTML(`afterbegin`, '<p>' + JSON.stringify(msg) + '</p>');
 }

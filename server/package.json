@@ -2,9 +2,9 @@
   "name": "ws-server",
   "author": "Clint Heyer",
   "description": "Basic websocket server",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
-    "node": "14.x"
+    "node": ">= 17.x"
   },
   "private": true,
   "bin": {
@@ -15,16 +15,16 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "body-parser": "~1.19.0",
+    "body-parser": "~1.20.0",
     "cookie-parser": "~1.4.5",
     "debug": "~4.3.1",
-    "express": "~4.17.1",
-    "express-ws": "^4.0.0",
-    "middleware-static-livereload": "1.2.17",
+    "express": "~4.18.1",
+    "express-ws": "^5.0.2",
+    "middleware-static-livereload": "1.2.21",
     "morgan": "~1.10.0",
-    "node-dev": "^6.4.0",
+    "node-dev": "^7.4.3",
     "pug": "3.0.2",
     "serve-favicon": "~2.5.0",
-    "ws": "^7.4.3"
+    "ws": "^8.8.0"
   }
 }

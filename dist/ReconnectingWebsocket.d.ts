@@ -4,7 +4,7 @@
  * https://github.com/pladaria/reconnecting-websocket
  * License MIT
  */
-import * as Events from './Events.js';
+import * as Events from './util/Events.js';
 export declare type Event = Events.Event;
 export declare type ErrorEvent = Events.ErrorEvent;
 export declare type CloseEvent = Events.CloseEvent;
