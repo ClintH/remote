@@ -39,10 +39,7 @@ export class WebsocketBroadcast extends BroadcasterBase {
     maintain() {
     }
     send(payload) {
-        if (typeof payload === `string`) {
-            payload = { data: payload };
-        }
-        this._broadcast.ensureId(payload);
+        payload = this._broadcast._manager.validateOutgoing(payload);
         payload._channel = `ws-bc`;
         this._ws.send(JSON.stringify(payload));
         return true;

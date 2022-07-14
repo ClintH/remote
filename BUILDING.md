@@ -33,7 +33,7 @@ const r = new Remote({
 });
 ```
 
-## 3. Run local websocket server
+## 3. Run local WebSocket server
 
 One-time setup:
 

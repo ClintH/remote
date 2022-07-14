@@ -25,6 +25,7 @@ export declare class Manager extends EventTarget {
     _debugMaintain: boolean;
     private _defaultLog;
     private _statusDisplay;
+    private _seenIds;
     readonly peerId: string;
     constructor(opts?: Options);
     getChannelFactory(name: string): IChannelFactory | undefined;
@@ -33,6 +34,8 @@ export declare class Manager extends EventTarget {
     onMessageReceived(data: object, via: IPeeringSessionImpl): void;
     send(data: any, to?: string): void;
     advertise(): void;
+    validateOutgoing(payload: any): any;
+    validateIncoming(msg: any): boolean;
     private maintain;
     dump(): void;
     log(msg: string): void;

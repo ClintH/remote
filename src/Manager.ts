@@ -1,5 +1,6 @@
+import * as Util from './Util';
 import {BcBroadcast} from "./BcBroadcast";
-import {Broadcast,BroadcasterState,IBroadcaster} from "./Broadcast";
+import {Broadcast,IBroadcaster} from "./Broadcast";
 import {IChannelFactory} from "./IChannel";
 import {LogLevel} from "./util/Log";
 import {Peering} from "./Peering";
@@ -30,11 +31,13 @@ export class Manager extends EventTarget {
   _debugMaintain:boolean;
   private _defaultLog:string;
   private _statusDisplay:StatusDisplay;
+  private _seenIds:Set<string>;
 
   readonly peerId:string;
 
   constructor(readonly opts:Options = {}) {
     super();
+    this._seenIds = new Set();
     
     this.peerId = opts.peerId ?? new Date().getMilliseconds() + `-` + Math.floor(Math.random()*100);
     this._allowNetwork = opts.allowNetwork ?? false;
@@ -92,8 +95,7 @@ export class Manager extends EventTarget {
   }
 
   send(data:any, to?:string) {
-    if (typeof data === `string`) data = { msg: data};
-    this.broadcast.ensureId(data);
+    data = this.validateOutgoing(data);
 
     if (to !== undefined && to.length > 0) {
       data._to = to;
@@ -135,7 +137,38 @@ export class Manager extends EventTarget {
     this.broadcast.send({...ad});
   }
 
+  
+  validateOutgoing(payload:any) {
+    const t= typeof payload;
+    if (t === `string` || t ===`number` || t === `boolean` ) {
+      payload = {data:payload};
+    } else if (Array.isArray(payload)) {
+      payload = {data:payload};
+    } else if (t === `bigint` || t ===`function`) {
+      throw new Error(`cannot send type ${t}`);
+    }
+  
+    if (payload._id === undefined) {
+      const id = Util.shortUuid();
+      payload._id = id;
+      this._seenIds.add(id);
+    }
+    payload._from = this.peerId;
+    return payload
+  }
+
+  validateIncoming(msg:any) {
+    if (this._seenIds.has(msg._id)) {
+      return false;
+    }
+    this._seenIds.add(msg._id);
+    return true;
+  }
+
   private maintain() {
+    const seen = [...this._seenIds.values()];
+    this._seenIds = new Set(seen.slice(seen.length/2));
+
     this.peering.maintain();
     this.broadcast.maintain();
 
@@ -147,6 +180,7 @@ export class Manager extends EventTarget {
 
   dump() {
     console.group(`remote`);
+    console.log(`# seen msg ids: ${[...this._seenIds.values()].length}`);
     this.peering.dumpToConsole()
     this.broadcast.dumpToConsole();
     console.groupEnd();

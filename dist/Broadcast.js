@@ -1,15 +1,12 @@
-import * as Util from './Util';
 export class Broadcast extends EventTarget {
     constructor(_manager) {
         super();
         this._manager = _manager;
         this._broadcast = [];
         this._peerId = _manager.peerId;
-        this._seenIds = new Set();
     }
     dumpToConsole() {
         console.group(`Broadcasters`);
-        console.log(`# seen msg ids: ${[...this._seenIds.values()].length}`);
         for (const b of this._broadcast) {
             console.log(b.name + ' (' + b.state + ')');
         }
@@ -24,16 +21,8 @@ export class Broadcast extends EventTarget {
         this._broadcast.push(b);
     }
     send(payload) {
-        this.ensureId(payload);
+        payload = this._manager.validateOutgoing(payload);
         this._broadcast.forEach(b => b.send(payload));
-    }
-    ensureId(payload) {
-        if (payload._id === undefined) {
-            const id = Util.shortUuid();
-            payload._id = id;
-            this._seenIds.add(id);
-        }
-        payload._from = this._peerId;
     }
     warn(msg) {
         console.log(`Broadcast`, msg);
@@ -45,12 +34,11 @@ export class Broadcast extends EventTarget {
         if (_from !== undefined)
             this._manager.peering.notifySeenPeer(_from, session);
         if (_id === undefined) {
-            this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
+            this.warn(`Session message received without an id. Dropping. ${JSON.stringify(data)}`);
             return;
         }
-        if (!this._seenIds.has(_id)) {
-            this._seenIds.add(_id);
-        }
+        if (!this._manager.validateIncoming(data))
+            return;
         this._manager.onMessageReceived(data, via);
     }
     onMessage(data, via) {
@@ -62,12 +50,8 @@ export class Broadcast extends EventTarget {
             this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
             return;
         }
-        if (this._seenIds.has(_id)) {
+        if (!this._manager.validateIncoming(data))
             return;
-        }
-        else {
-            this._seenIds.add(_id);
-        }
         if (_kind === undefined) {
             this._manager.onBroadcastReceived(data, via);
             return;
@@ -89,8 +73,6 @@ export class Broadcast extends EventTarget {
     maintain() {
         const bcs = [...this._broadcast];
         bcs.forEach(b => b.maintain());
-        const seen = [...this._seenIds.values()];
-        this._seenIds = new Set(seen.slice(seen.length / 2));
     }
     log(msg) {
         console.log(`BroadcastMessageHandler`, msg);

@@ -13,6 +13,10 @@ setInterval(() => {
     what: `this is a broadcast`,
     timestamp: new Date().toLocaleString()
   });
+  r.broadcast(false);
+  r.broadcast(10);
+  r.broadcast(['hello', 'there']);
+  r.broadcast('a string');
 }, 10 * 1000);
 
 document.getElementById(`btnSend`).addEventListener(`click`, () => {

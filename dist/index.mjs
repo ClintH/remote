@@ -1,3 +1,22 @@
+const shortUuid = () => {
+    const firstPart = (Math.random() * 46656) | 0;
+    const secondPart = (Math.random() * 46656) | 0;
+    return ("000" + firstPart.toString(36)).slice(-3) + ("000" + secondPart.toString(36)).slice(-3);
+};
+const elapsed = (from) => {
+    let e = Date.now() - from;
+    if (e < 1000)
+        return `${e}ms`;
+    e /= 1000;
+    if (e < 1000)
+        return `${e}s`;
+    e /= 60;
+    if (e < 60)
+        return `${e}mins`;
+    e /= 60;
+    return `${e}hrs`;
+};
+
 class BroadcasterBase {
     constructor(_name, _broadcast, _log) {
         this._name = _name;
@@ -81,34 +100,12 @@ class BcBroadcast extends BroadcasterBase {
     maintain() {
     }
     send(payload) {
-        if (typeof payload === `string`) {
-            payload = { data: payload };
-        }
-        this._broadcast.ensureId(payload);
+        payload = this._broadcast._manager.validateOutgoing(payload);
         payload._channel = `bc-bc`;
         this._bc.postMessage(JSON.stringify(payload));
         return true;
     }
 }
-
-const shortUuid = () => {
-    const firstPart = (Math.random() * 46656) | 0;
-    const secondPart = (Math.random() * 46656) | 0;
-    return ("000" + firstPart.toString(36)).slice(-3) + ("000" + secondPart.toString(36)).slice(-3);
-};
-const elapsed = (from) => {
-    let e = Date.now() - from;
-    if (e < 1000)
-        return `${e}ms`;
-    e /= 1000;
-    if (e < 1000)
-        return `${e}s`;
-    e /= 60;
-    if (e < 60)
-        return `${e}mins`;
-    e /= 60;
-    return `${e}hrs`;
-};
 
 class Broadcast extends EventTarget {
     constructor(_manager) {
@@ -116,11 +113,9 @@ class Broadcast extends EventTarget {
         this._manager = _manager;
         this._broadcast = [];
         this._peerId = _manager.peerId;
-        this._seenIds = new Set();
     }
     dumpToConsole() {
         console.group(`Broadcasters`);
-        console.log(`# seen msg ids: ${[...this._seenIds.values()].length}`);
         for (const b of this._broadcast) {
             console.log(b.name + ' (' + b.state + ')');
         }
@@ -135,16 +130,8 @@ class Broadcast extends EventTarget {
         this._broadcast.push(b);
     }
     send(payload) {
-        this.ensureId(payload);
+        payload = this._manager.validateOutgoing(payload);
         this._broadcast.forEach(b => b.send(payload));
-    }
-    ensureId(payload) {
-        if (payload._id === undefined) {
-            const id = shortUuid();
-            payload._id = id;
-            this._seenIds.add(id);
-        }
-        payload._from = this._peerId;
     }
     warn(msg) {
         console.log(`Broadcast`, msg);
@@ -156,12 +143,11 @@ class Broadcast extends EventTarget {
         if (_from !== undefined)
             this._manager.peering.notifySeenPeer(_from, session);
         if (_id === undefined) {
-            this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
+            this.warn(`Session message received without an id. Dropping. ${JSON.stringify(data)}`);
             return;
         }
-        if (!this._seenIds.has(_id)) {
-            this._seenIds.add(_id);
-        }
+        if (!this._manager.validateIncoming(data))
+            return;
         this._manager.onMessageReceived(data, via);
     }
     onMessage(data, via) {
@@ -173,12 +159,8 @@ class Broadcast extends EventTarget {
             this.warn(`Message received without an id. Dropping. ${JSON.stringify(data)}`);
             return;
         }
-        if (this._seenIds.has(_id)) {
+        if (!this._manager.validateIncoming(data))
             return;
-        }
-        else {
-            this._seenIds.add(_id);
-        }
         if (_kind === undefined) {
             this._manager.onBroadcastReceived(data, via);
             return;
@@ -200,8 +182,6 @@ class Broadcast extends EventTarget {
     maintain() {
         const bcs = [...this._broadcast];
         bcs.forEach(b => b.maintain());
-        const seen = [...this._seenIds.values()];
-        this._seenIds = new Set(seen.slice(seen.length / 2));
     }
     log(msg) {
         console.log(`BroadcastMessageHandler`, msg);
@@ -1346,10 +1326,7 @@ class WebsocketBroadcast extends BroadcasterBase {
     maintain() {
     }
     send(payload) {
-        if (typeof payload === `string`) {
-            payload = { data: payload };
-        }
-        this._broadcast.ensureId(payload);
+        payload = this._broadcast._manager.validateOutgoing(payload);
         payload._channel = `ws-bc`;
         this._ws.send(JSON.stringify(payload));
         return true;
@@ -1360,6 +1337,7 @@ class Manager extends EventTarget {
     constructor(opts = {}) {
         super();
         this.opts = opts;
+        this._seenIds = new Set();
         this.peerId = opts.peerId ?? new Date().getMilliseconds() + `-` + Math.floor(Math.random() * 100);
         this._allowNetwork = opts.allowNetwork ?? false;
         this._debugMaintain = opts.debugMaintain ?? false;
@@ -1410,9 +1388,7 @@ class Manager extends EventTarget {
         }));
     }
     send(data, to) {
-        if (typeof data === `string`)
-            data = { msg: data };
-        this.broadcast.ensureId(data);
+        data = this.validateOutgoing(data);
         if (to !== undefined && to.length > 0) {
             data._to = to;
             const n = this.peering.getLogicalNode(to);
@@ -1441,7 +1417,35 @@ class Manager extends EventTarget {
         };
         this.broadcast.send({ ...ad });
     }
+    validateOutgoing(payload) {
+        const t = typeof payload;
+        if (t === `string` || t === `number` || t === `boolean`) {
+            payload = { data: payload };
+        }
+        else if (Array.isArray(payload)) {
+            payload = { data: payload };
+        }
+        else if (t === `bigint` || t === `function`) {
+            throw new Error(`cannot send type ${t}`);
+        }
+        if (payload._id === undefined) {
+            const id = shortUuid();
+            payload._id = id;
+            this._seenIds.add(id);
+        }
+        payload._from = this.peerId;
+        return payload;
+    }
+    validateIncoming(msg) {
+        if (this._seenIds.has(msg._id)) {
+            return false;
+        }
+        this._seenIds.add(msg._id);
+        return true;
+    }
     maintain() {
+        const seen = [...this._seenIds.values()];
+        this._seenIds = new Set(seen.slice(seen.length / 2));
         this.peering.maintain();
         this.broadcast.maintain();
         const cf = [...this._channelFactories];
@@ -1450,6 +1454,7 @@ class Manager extends EventTarget {
     }
     dump() {
         console.group(`remote`);
+        console.log(`# seen msg ids: ${[...this._seenIds.values()].length}`);
         this.peering.dumpToConsole();
         this.broadcast.dumpToConsole();
         console.groupEnd();

@@ -30,8 +30,8 @@ export class Remote {
 
   /**
    * Broadcast a message on all available broadcast channels
-   * eg web sockets, BroadcastChannel
-   * @param data 
+   * eg web sockets, BroadcastChannel.
+   * @param data Object or string
    */
   broadcast(data:any) {
     this._manager.broadcast.send(data);

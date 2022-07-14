@@ -15,14 +15,12 @@ export declare type BroadcastStateChange = {
 export declare class Broadcast extends EventTarget {
     readonly _manager: Manager;
     private _broadcast;
-    private _seenIds;
     private _peerId;
     constructor(_manager: Manager);
     dumpToConsole(): void;
     onBroadcasterState(priorState: BroadcasterState, newState: BroadcasterState, source: IBroadcaster): void;
     add(b: IBroadcaster): void;
     send(payload: any): void;
-    ensureId(payload: any): void;
     warn(msg: any): void;
     onSessionMessageReceived(data: any, via: IPeeringSessionImpl, session: PeeringSession): void;
     onMessage(data: any, via: IBroadcaster): void;

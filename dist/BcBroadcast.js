@@ -27,10 +27,7 @@ export class BcBroadcast extends BroadcasterBase {
     maintain() {
     }
     send(payload) {
-        if (typeof payload === `string`) {
-            payload = { data: payload };
-        }
-        this._broadcast.ensureId(payload);
+        payload = this._broadcast._manager.validateOutgoing(payload);
         payload._channel = `bc-bc`;
         this._bc.postMessage(JSON.stringify(payload));
         return true;

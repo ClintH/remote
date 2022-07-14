@@ -43,7 +43,7 @@ r.onData = (d) => {
 
 To allow network connectivity, pass in the `allowNetwork` option when creating. This will allow you to send messages between different devices.
 
-You may also want to specify the websocket URL via `websocket`. If you're running the provided server (see below), the address is `ws://127.0.0.1:8080/ws`. If you're running on Glitch, your address might be something like: `wss://MY-ZANY-PROJECT.glitch.me/ws`. Note the use of `wss` rather than `ws` when connecting over the wild internet.
+You may also want to specify the WebSocket URL via `websocket`. If you're running the provided server (see below), the address is `ws://127.0.0.1:8080/ws`. If you're running on Glitch, your address might be something like: `wss://MY-ZANY-PROJECT.glitch.me/ws`. Note the use of `wss` rather than `ws` when connecting over the wild internet.
 
 ```js
 import {Remote} from "https://unpkg.com/@clinth/remote@latest/dist/index.mjs";
@@ -56,7 +56,7 @@ const r = new Remote({
 
 Remote will try to establish a WebRTC connection, advertised via the web socket server. Messages
 which are sent directly to a peer will use this means of transport. WebRTC can avoid a lot of the latency issues
-encountered if you're messaging via a publicly-hosted websocket server such as on Glitch.
+encountered if you're messaging via a publicly-hosted WebSocket server such as on Glitch.
 
 ## Peer ids
 
@@ -93,7 +93,7 @@ r.onData = (d) => {
 }
 ```
 
-You can assign an id at startup with the `peerId` parameter:
+You can assign an id at start-up with the `peerId` parameter:
 
 ```js
 const r = new Remote({
@@ -142,17 +142,17 @@ In short, be mindful of what you are sending when using a publicly-available ser
 
 ### WebRTC
 
-WebRTC connections are facilitated by the web socket connection. This allows peers to exchange the handshake information required. Thus the possibility for peers to connect via WebRTC is contingent on their ability to connect to the websocket server.
+WebRTC connections are facilitated by the web socket connection. This allows peers to exchange the handshake information required. Thus the possibility for peers to connect via WebRTC is contingent on their ability to connect to the WebSocket server.
 
 ## Options
 
 When creating a new instance, options can be set to customise behaviour. All can be omitted by default.
 
-* websocket (string) URL for websocket server
+* websocket (string) URL for WebSocket server
 * peerId (string) Peer id
-* maintainLoopMs (number) How often to do housekeeping in ms
-* allowNetwork (boolean) If true, WebRTC & websockets will be attempted
-* debugMaintain (boolean) If true, spits out logging everytime a housekeeping loop runs
+* maintainLoopMs (number) How often to do housekeeping in milliseconds. Faster will catch disconnected states quicker, but higher CPU usage.
+* allowNetwork (boolean) If true, WebRTC & WebSockets will be attempted
+* debugMaintain (boolean) If true, spits out logging every time a housekeeping loop runs
 * defaultLog (string silent|verbose|error): Logging level ('error' by default)
 * log.ws / log.rtc / log.bc: Logging level for given sub-system
 
