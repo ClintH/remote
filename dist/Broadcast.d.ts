@@ -1,13 +1,13 @@
 import { Manager } from "./Manager";
 import { IPeeringSessionImpl, PeeringSession } from './PeeringSession';
-export declare type BroadcasterState = `idle` | `open` | `closed` | `error`;
+export type BroadcasterState = `idle` | `open` | `closed` | `error`;
 export interface IBroadcaster {
     maintain(): void;
     send(payload: any): boolean;
     get state(): BroadcasterState;
     get name(): string;
 }
-export declare type BroadcastStateChange = {
+export type BroadcastStateChange = {
     priorState: BroadcasterState;
     newState: BroadcasterState;
     source: IBroadcaster;

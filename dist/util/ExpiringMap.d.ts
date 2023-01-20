@@ -1,4 +1,4 @@
-declare type ExpiringValue<V> = {
+type ExpiringValue<V> = {
     data: V;
     expiresAt: number;
 };

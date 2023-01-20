@@ -11,9 +11,26 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const expressWs = require('express-ws');
+const readline = require('readline');
 
 const ews = expressWs(express());
 const app = ews.app;
+
+readline.emitKeypressEvents(process.stdin);
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on(`keypress`, (chunk, key) => {
+  if (!key) return;
+  if (key.name ===`c` && key.ctrl) {
+    console.log(`Ctrl+C pressed, exiting`);
+    process.exit();
+    return;
+  }
+  if (key.name === `q`) {
+    console.log(`Q pressed, exiting`);
+    process.exit();
+    return;
+  }
+});
 
 // Set up the '/ws' resource to handle web socket connections
 app.ws('/ws', function (ws, req) {

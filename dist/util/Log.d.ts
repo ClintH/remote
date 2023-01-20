@@ -1,4 +1,4 @@
-export declare type LogLevel = `silent` | `verbose` | `error`;
+export type LogLevel = `silent` | `verbose` | `error`;
 export declare class Log {
     readonly _prefix: string;
     readonly _level: LogLevel;

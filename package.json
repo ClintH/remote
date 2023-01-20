@@ -21,15 +21,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "rimraf": "^3.0.2",
-    "rollup": "^2.76.0",
-    "typescript": "^4.7.4"
+    "rimraf": "^4.1.1",
+    "rollup": "^3.10.0",
+    "typescript": "^4.9.4"
   },
   "repository": {
     "url": "git@github.com:clinth/remote.git"
   },
   "dependencies": {
-    "concurrently": "^7.2.2",
+    "concurrently": "^7.6.0",
     "live-server": "^1.2.2"
   }
 }

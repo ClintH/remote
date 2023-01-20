@@ -3,7 +3,7 @@ import { PeeringInvite } from "./Peering";
 import { PeeringSession } from "./PeeringSession";
 export declare enum ChannelStates {
 }
-export declare type IChannel = {
+export type IChannel = {
     maintain(): void;
     name: string;
 };

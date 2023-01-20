@@ -1,6 +1,6 @@
 import { Peering } from "./Peering.js";
 import { PeeringSession } from "./PeeringSession.js";
-export declare type LogicalNodeState = `idle` | `open` | `dead`;
+export type LogicalNodeState = `idle` | `open` | `dead`;
 export declare class LogicalNode {
     private _id;
     private _peering;

@@ -3,28 +3,28 @@ import { IBroadcaster } from "./Broadcast";
 import { LogicalNode, LogicalNodeState } from "./LogicalNode";
 import { Manager } from "./Manager";
 import { PeeringSession } from "./PeeringSession";
-export declare type PeeringAdvert = {
+export type PeeringAdvert = {
     peerId: string;
     channels: string;
 };
-export declare type PeeringReply = {
+export type PeeringReply = {
     payload: string;
     peeringSessionId: string;
     sub: string;
 };
-export declare type PeeringInvite = {
+export type PeeringInvite = {
     peeringSessionId: string;
     invitee: string;
     inviter: string;
     payload: string;
     channel: string;
 };
-export declare type PeeringSessionState = `idle` | `started` | `closed` | `open` | `timeout`;
-export declare type LogicalNodeChange = {
+export type PeeringSessionState = `idle` | `started` | `closed` | `open` | `timeout`;
+export type LogicalNodeChange = {
     node: LogicalNode;
     type: string;
 };
-export declare type LogicalNodeStateChange = {
+export type LogicalNodeStateChange = {
     priorState: LogicalNodeState;
     newState: LogicalNodeState;
     node: LogicalNode;

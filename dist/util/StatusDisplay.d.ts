@@ -1,5 +1,5 @@
 import { Manager } from "../Manager";
-export declare type StatusDisplayOpts = {
+export type StatusDisplayOpts = {
     updateRateMs?: number;
     defaultOpacity?: number;
     hue?: number;

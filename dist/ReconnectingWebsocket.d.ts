@@ -5,10 +5,10 @@
  * License MIT
  */
 import * as Events from './util/Events.js';
-export declare type Event = Events.Event;
-export declare type ErrorEvent = Events.ErrorEvent;
-export declare type CloseEvent = Events.CloseEvent;
-export declare type Options = {
+export type Event = Events.Event;
+export type ErrorEvent = Events.ErrorEvent;
+export type CloseEvent = Events.CloseEvent;
+export type Options = {
     WebSocket?: any;
     maxReconnectionDelay?: number;
     minReconnectionDelay?: number;
@@ -20,9 +20,9 @@ export declare type Options = {
     startClosed?: boolean;
     debug?: boolean;
 };
-export declare type UrlProvider = string | (() => string) | (() => Promise<string>);
-export declare type Message = string | ArrayBuffer | Blob | ArrayBufferView;
-export declare type ListenersMap = {
+export type UrlProvider = string | (() => string) | (() => Promise<string>);
+export type Message = string | ArrayBuffer | Blob | ArrayBufferView;
+export type ListenersMap = {
     error: Array<Events.WebSocketEventListenerMap['error']>;
     message: Array<Events.WebSocketEventListenerMap['message']>;
     open: Array<Events.WebSocketEventListenerMap['open']>;

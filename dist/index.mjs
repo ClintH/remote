@@ -920,12 +920,12 @@ class StatusDisplay {
     }
 }
 
-class Event$1 {
+let Event$1 = class Event {
     constructor(type, target) {
         this.target = target;
         this.type = type;
     }
-}
+};
 class ErrorEvent extends Event$1 {
     constructor(error, target) {
         super('error', target);

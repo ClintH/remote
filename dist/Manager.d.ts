@@ -3,7 +3,7 @@ import { IChannelFactory } from "./IChannel";
 import { LogLevel } from "./util/Log";
 import { Peering } from "./Peering";
 import { IPeeringSessionImpl } from "./PeeringSession";
-export declare type Options = {
+export type Options = {
     websocket?: string;
     peerId?: string;
     maintainLoopMs?: number;
