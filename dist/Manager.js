@@ -77,7 +77,6 @@ export class Manager extends EventTarget {
                 }
             }
         }
-        console.log(`Broadcast fallback`);
         this.broadcast.send(data);
     }
     advertise() {
