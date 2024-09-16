@@ -1,9 +1,9 @@
-import {Remote} from "../dist/index.mjs";
+import { Remote } from "../dist/index.mjs";
 
 const logEl = document.getElementById(`log`);
 const r = new Remote({
   websocket: `ws://127.0.0.1:8080/ws`,
-  allowNetwork: true,
+  allowNetwork: false,
   defaultLog: `verbose`
 });
 
