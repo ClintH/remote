@@ -1,10 +1,11 @@
-import {Manager, Options} from './Manager.js'
+import { Manager, Options } from './Manager.js'
 //import './BroadcastChannel.js'
+export type { Options };
 
 export class Remote {
   _manager;
 
-  constructor(opts:Options) {
+  constructor(opts: Options) {
     this._manager = new Manager(opts);
     this._manager.addEventListener(`message`, evt => {
       // @ts-ignore
@@ -15,7 +16,7 @@ export class Remote {
     })
   }
 
-  get id():string {
+  get id(): string {
     return this._manager.peerId;
   }
   /**
@@ -24,7 +25,7 @@ export class Remote {
    * @param data 
    * @param to 
    */
-  send(data:any, to?:string) {
+  send(data: any, to?: string) {
     this._manager.send(data, to);
   }
 
@@ -33,12 +34,12 @@ export class Remote {
    * eg web sockets, BroadcastChannel.
    * @param data Object or string
    */
-  broadcast(data:any) {
+  broadcast(data: any) {
     this._manager.broadcast.send(data);
   }
 
-  onData(msg:any) {
+  onData(msg: any) {
     // no-op
   }
 }
-export {Manager}
+export { Manager }
