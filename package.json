@@ -1,9 +1,8 @@
 {
   "name": "@clinth/remote",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "description": "",
-  "module": "dist/index.min.mjs",
-  "unpkg": "dist/index.umd.min.js",
+  "module": "dist/index.mjs",
   "exports": "./dist/index.js",
   "type": "module",
   "types": "dist/index.d.ts",
@@ -22,14 +21,13 @@
   "license": "MIT",
   "devDependencies": {
     "rimraf": "^6.0.1",
-    "rollup": "^4.21.1",
-    "typescript": "^5.5.4"
+    "rollup": "^4.46.2",
+    "typescript": "^5.9.2",
+    "concurrently": "^9.2.0",
+    "live-server": "^1.2.2"
   },
   "repository": {
     "url": "git@github.com:clinth/remote.git"
   },
-  "dependencies": {
-    "concurrently": "^8.2.2",
-    "live-server": "^1.2.2"
-  }
+  "dependencies": {}
 }
